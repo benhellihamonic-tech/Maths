@@ -234,6 +234,7 @@ async function saveActivity(id,state,event=activityEvent()){
   } catch(e){
     if(e.status===409){
       if(e.data.activity) activities.set(id,e.data.activity);
+      else activities.delete(id);
       activityPending=null;
       error="Cette activité a changé sur un autre appareil. La version enregistrée a été rechargée.";
     }else{
@@ -416,7 +417,11 @@ function restoreTraining(ref){
 async function saveTraining(){
   if(!training) return;
   const {activityId,seed,answers,index,done,deadline}=training;
-  await saveActivity(activityId,{seed,answers:[...answers],index,done,deadline,updated:Date.now()});
+  const saved=await saveActivity(activityId,{seed,answers:[...answers],index,done,deadline,updated:Date.now()});
+  if(!saved&&!activityPending&&training?.activityId===activityId){
+    const canonical=activities.get(activityId);
+    training=canonical?{...training,...canonical.state}:null;
+  }
 }
 function captureTrainingAnswer(){
   const form=root.querySelector("#training-answer");
@@ -932,6 +937,7 @@ function render() {
 async function session() {
   const data=await api("me");
   activities=new Map((data.activities??[]).map(activity=>[activity.id,activity]));
+  training=null;renderTrainingIntro=null;
   activityHistory=data.activityHistory??[];classFocus=data.classFocus??{};
   user=data.user;progress=data.progress;evidence=data.evidence||{};selectedGrade=user.grade||"";filter=selectedGrade;
   if(user.role==="teacher") students=(await api("students")).students;
