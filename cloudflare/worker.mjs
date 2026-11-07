@@ -1,7 +1,8 @@
-import { lessons, questions } from "../public/content.js";
+import { concepts, games, lessons, questions } from "../public/content.js";
+import { commonFactor } from "../public/assessment.js";
 import { updateEvidence } from "../public/progression.js";
 
-const encoder = new TextEncoder();
+const encode = value => new TextEncoder().encode(value);
 const cookieName = "__Host-archipel";
 const lifetime = 43200;
 const grades = ["6e", "5e", "4e", "3e"];
@@ -14,11 +15,13 @@ const securityHeaders = {
 const hex = bytes => Array.from(new Uint8Array(bytes), b => b.toString(16).padStart(2,"0")).join("");
 const unhex = text => Uint8Array.from(text.match(/../g), byte => parseInt(byte,16));
 const random = (length=32) => hex(crypto.getRandomValues(new Uint8Array(length)));
-const hash = async value => hex(await crypto.subtle.digest("SHA-256",encoder.encode(value)));
+const hash = async value => hex(await crypto.subtle.digest("SHA-256",encode(value)));
 const now = () => Math.floor(Date.now()/1000);
+const eventID = value => typeof value==="string"&&/^[-a-zA-Z0-9]{8,64}$/.test(value);
+const revisionNumber = value => Number.isSafeInteger(value)&&value>=0&&value<Number.MAX_SAFE_INTEGER;
 
 async function passwordDigest(password, salt) {
-  const key = await crypto.subtle.importKey("raw",encoder.encode(password),"PBKDF2",false,["deriveBits"]);
+  const key = await crypto.subtle.importKey("raw",encode(password),"PBKDF2",false,["deriveBits"]);
   return hex(await crypto.subtle.deriveBits({name:"PBKDF2",hash:"SHA-256",salt:unhex(salt),iterations:100000},key,256));
 }
 function equals(a,b) {
@@ -41,6 +44,7 @@ async function login(request,db,body) {
   const password=body.password;
   if(!/^[a-z0-9-]{3,24}$/.test(username)||typeof password!=="string"||password.length<8||password.length>128)
     return fail("Identifiant de 3 à 24 caractères et mot de passe de 8 à 128 caractères.",400);
+  if(body.create!==undefined&&typeof body.create!=="boolean") return fail("Mode de connexion invalide.",400);
   const timestamp=now();
   const ip=request.headers.get("CF-Connecting-IP")||"unknown";
   const key=await hash(ip+"|"+username+"|"+Math.floor(timestamp/300));
@@ -51,11 +55,14 @@ async function login(request,db,body) {
   if(pair.results[0].attempts>12||global.results[0].attempts>90)
     return fail("Trop de tentatives. Réessaie dans quelques minutes.",429);
   let user=await db.prepare("SELECT * FROM users WHERE username=?").bind(username).first();
+  if(user&&body.create===true) return fail("Cet identifiant est déjà utilisé.",409);
+  if(!user&&body.create===false) return fail("Identifiant ou mot de passe incorrect.",401);
   if(!user) {
     const salt=random(16), digest=await passwordDigest(password,salt);
     const created=await db.prepare("INSERT OR IGNORE INTO users (username,name,salt,password) VALUES (?,?,?,?)")
       .bind(username,username,salt,digest).run();
     if(created.meta.changes) user={password:digest,salt};
+    else if(body.create===true) return fail("Cet identifiant est déjà utilisé.",409);
     else user=await db.prepare("SELECT * FROM users WHERE username=?").bind(username).first();
   }
   if(!equals(await passwordDigest(password,user.salt),user.password))
@@ -69,13 +76,22 @@ async function login(request,db,body) {
   return reply({ok:true},200,sessionCookie(token,lifetime));
 }
 
-async function evidence(db,username) {
-  const {results}=await db.prepare(`SELECT lesson,mode,state FROM progress_history
-    WHERE username=? AND json_extract(state,'$.done')=1
-    UNION ALL SELECT lesson,mode,state FROM progress WHERE username=?`).bind(username,username).all();
+const evidenceQuery = `SELECT lesson,mode,state FROM progress_history
+  WHERE username=? AND (mode='jeu' OR json_extract(state,'$.done')=1)
+  UNION ALL SELECT lesson,mode,state FROM progress WHERE username=?`;
+export function summarizeProgress(rows) {
   const record=Object.create(null);
-  for(const row of results) updateEvidence(record,row.lesson,row.mode,JSON.parse(row.state));
+  for(const row of rows){
+    if(!Object.hasOwn(lessons,row.lesson)||!modes.includes(row.mode)) continue;
+    const state=JSON.parse(row.state);
+    const verified=row.mode==="quiz"?sanitizeProgress(row.lesson,row.mode,state):state;
+    if(verified) updateEvidence(record,row.lesson,row.mode,verified);
+  }
   return record;
+}
+async function evidence(db,username) {
+  const {results}=await db.prepare(evidenceQuery).bind(username,username).all();
+  return summarizeProgress(results);
 }
 
 function correctAnswer(q,value) {
@@ -93,20 +109,60 @@ function correctAnswer(q,value) {
   }
   return typeof value==="number"&&Number.isFinite(value)&&Math.abs(value-q.answer)<1e-9;
 }
-function sanitizeProgress(lesson,mode,state) {
+function gameReward(lesson,step,proof) {
+  if(!Array.isArray(proof)||!proof.every(Number.isInteger)) return null;
+  if(lesson==="arithmetique3"){
+    const [n,b]=proof;
+    const [startN,startB]=[[24,18],[30,42],[45,60]][step];
+    return proof.length===2&&n>0&&n<=startN&&b>0&&b<=startB&&
+      n*startB===b*startN&&commonFactor(n,b)===1?1:null;
+  }
+  if(lesson==="graphiques3"){
+    const [distance]=proof;
+    return proof.length===1&&distance>=0&&distance<=10&&
+      [distance===4,distance>0&&distance<4,distance>4][step]?1:null;
+  }
+  const concept=concepts[lesson];
+  if(concept){
+    const [value]=proof;
+    return proof.length===1&&value>=concept.min&&value<=concept.max&&
+      concept.model(value)===concept.model(concept.targets[step])?1:null;
+  }
+  const mission=games[lesson]?.[step];
+  if(!mission||proof.length!==2) return null;
+  const [a,b]=proof;
+  if(lesson!=="division") return a===mission.a&&b===mission.b?1:null;
+  const seats=a*mission.a+b*mission.b;
+  if(a<0||b<0||a+b>mission.max||seats<mission.goal) return null;
+  for(let i=0;i<=mission.max;i++) for(let j=0;j<=mission.max-i;j++){
+    const alternative=i*mission.a+j*mission.b;
+    if(alternative>=mission.goal&&alternative<seats) return 0;
+  }
+  return 1;
+}
+export function sanitizeProgress(lesson,mode,state,previous,proof) {
+  if(!Object.hasOwn(lessons,lesson)||!modes.includes(mode)) return null;
   if(!state||typeof state!=="object"||typeof state.done!=="boolean"||!Number.isInteger(state.step)||
     !Number.isInteger(state.seed)||state.seed<0||state.seed>0x7fffffff||![0,1,2].includes(state.level)||
     !Array.isArray(state.game)||state.game.length>3||!state.game.every(n=>Number.isInteger(n)&&Math.abs(n)<=100)) return null;
   const limit={quiz:5,jeu:3,lecon:1}[mode];
   if(state.step<0||state.step>limit||state.done!==(state.step===limit)) return null;
   const version=state.quizVersion??0;
-  if(![0,1,2,3].includes(version)) return null;
+  if(![0,1,2,3,4].includes(version)) return null;
   const checked={step:state.step,done:state.done,seed:state.seed,level:state.level,
     quizVersion:version,game:state.game,answers:[],stars:0,bestStars:0};
   if(mode==="jeu") {
-    if(![state.stars,state.bestStars].every(n=>Number.isInteger(n)&&n>=0&&n<=3)||state.stars>state.step) return null;
-    checked.stars=state.stars;
-    checked.bestStars=state.bestStars;
+    const sameAttempt=previous?.seed===state.seed;
+    const before=sameAttempt?previous.step:0;
+    if(state.step===0) {
+      if(sameAttempt&&before>0) return null;
+    } else {
+      if(state.step!==before+1) return null;
+      const earned=proof===undefined?0:gameReward(lesson,before,proof);
+      if(earned===null) return null;
+      checked.stars=(sameAttempt?previous.stars||0:0)+earned;
+    }
+    checked.bestStars=Math.max(previous?.bestStars||0,previous?.stars||0,checked.stars);
   }
   if(mode==="quiz") {
     if(!Array.isArray(state.answers)||state.answers.length!==state.step) return null;
@@ -118,6 +174,91 @@ function sanitizeProgress(lesson,mode,state) {
     }
   }
   return checked;
+}
+
+function activityRecord(row) {
+  return row?{id:row.id,state:JSON.parse(row.state),revision:row.revision}:null;
+}
+async function saveActivity(db,username,{id,state,revision,event}) {
+  if(typeof id!=="string"||!/^[-a-zA-Z0-9/:_]{1,120}$/.test(id)||
+    !state||typeof state!=="object"||Array.isArray(state)||!revisionNumber(revision)||!eventID(event))
+    return fail("Activité invalide.",400);
+  const payload=JSON.stringify(state);
+  const noEvent="NOT EXISTS (SELECT 1 FROM activity_events WHERE username=? AND event=?)";
+  const [, , , receipt, result]=await db.batch([
+    db.prepare(`INSERT INTO activities (username,id,state,revision,last_event)
+      SELECT ?,?,?,1,? WHERE ?=0 AND ${noEvent} ON CONFLICT(username,id) DO NOTHING`)
+      .bind(username,id,payload,event,revision,username,event),
+    db.prepare(`UPDATE activities SET state=?,revision=revision+1,last_event=?
+      WHERE username=? AND id=? AND revision=? AND ${noEvent}`)
+      .bind(payload,event,username,id,revision,username,event),
+    db.prepare(`INSERT OR IGNORE INTO activity_events (username,event,id,state,revision,updated)
+      SELECT username,?,id,CASE WHEN json_type(state,'$.done')='true' THEN state END,revision,?
+      FROM activities WHERE username=? AND id=? AND last_event=?`)
+      .bind(event,Date.now(),username,id,event),
+    db.prepare("SELECT id FROM activity_events WHERE username=? AND event=?").bind(username,event),
+    db.prepare("SELECT id,state,revision FROM activities WHERE username=? AND id=?").bind(username,id),
+  ]);
+  const activity=activityRecord(result.results[0]);
+  if(receipt.results[0]?.id!==id)
+    return reply({error:"Cette activité a changé sur un autre appareil.",activity},409);
+  return reply({activity});
+}
+
+async function classFocus(db) {
+  const {results}=await db.prepare("SELECT grade,chapter FROM class_focus").all();
+  return Object.fromEntries(results.map(({grade,chapter})=>[grade,chapter]));
+}
+async function setClassFocus(db,{grade,chapter}) {
+  if(!grades.includes(grade)||typeof chapter!=="string"||!/^[a-z0-9-]{0,100}$/.test(chapter))
+    return fail("Chapitre de classe invalide.",400);
+  if(chapter) {
+    await db.prepare(`INSERT INTO class_focus (grade,chapter) VALUES (?,?)
+      ON CONFLICT(grade) DO UPDATE SET chapter=excluded.chapter`).bind(grade,chapter).run();
+  } else await db.prepare("DELETE FROM class_focus WHERE grade=?").bind(grade).run();
+  return reply({classFocus:await classFocus(db)});
+}
+
+const progressQuery=`SELECT lesson,mode,state,COALESCE(revision,0) AS revision
+  FROM progress LEFT JOIN progress_revisions USING (username,lesson,mode)`;
+const progressRecord = row => row?{lesson:row.lesson,mode:row.mode,...JSON.parse(row.state),revision:row.revision}:null;
+async function saveProgress(db,username,{lesson,mode,event,state:submitted,revision,proof}) {
+  if(!Object.hasOwn(lessons,lesson)||!modes.includes(mode)||!eventID(event)||
+    (revision!==undefined&&!revisionNumber(revision))) return fail("Progression invalide.",400);
+  const existing=db.prepare(progressQuery+" WHERE username=? AND lesson=? AND mode=?").bind(username,lesson,mode);
+  const receipt=db.prepare("SELECT lesson,mode FROM progress_history WHERE username=? AND event=?").bind(username,event);
+  const [current,replayed]=await Promise.all([existing.first(),receipt.first()]);
+  const previous=progressRecord(current);
+  const expected=revision??previous?.revision??0;
+  if(replayed?.lesson===lesson&&replayed.mode===mode)
+    return reply({ok:true,progress:previous,revision:previous?.revision??0,evidence:await evidence(db,username)});
+  if(replayed||expected!==(previous?.revision??0))
+    return reply({error:"Cette progression a changé sur un autre appareil.",progress:previous},409);
+  const state=sanitizeProgress(lesson,mode,submitted,previous,proof);
+  if(!state) return fail("Progression invalide.",400);
+  const updated=Date.now(), payload=JSON.stringify(state), next=expected+1;
+  const noEvent="NOT EXISTS (SELECT 1 FROM progress_history WHERE username=? AND event=?)";
+  const accepted=`EXISTS (SELECT 1 FROM progress_revisions WHERE username=? AND lesson=? AND mode=?
+    AND revision=? AND last_event=?) AND ${noEvent}`;
+  const guard=[username,lesson,mode,next,event,username,event];
+  const [, , , , recorded,result]=await db.batch([
+    db.prepare(`INSERT INTO progress_revisions (username,lesson,mode,revision,last_event)
+      SELECT ?,?,?,1,? WHERE ?=0 AND ${noEvent} ON CONFLICT(username,lesson,mode) DO NOTHING`)
+      .bind(username,lesson,mode,event,expected,username,event),
+    db.prepare(`UPDATE progress_revisions SET revision=?,last_event=?
+      WHERE username=? AND lesson=? AND mode=? AND revision=? AND ${noEvent}`)
+      .bind(next,event,username,lesson,mode,expected,username,event),
+    db.prepare(`INSERT INTO progress (username,lesson,mode,state,updated) SELECT ?,?,?,?,? WHERE ${accepted}
+      ON CONFLICT(username,lesson,mode) DO UPDATE SET state=excluded.state,updated=excluded.updated`)
+      .bind(username,lesson,mode,payload,updated,...guard),
+    db.prepare(`INSERT INTO progress_history (username,event,lesson,mode,state,updated)
+      SELECT ?,?,?,?,?,? WHERE ${accepted}`).bind(username,event,lesson,mode,payload,updated,...guard),
+    receipt,existing,
+  ]);
+  const progress=progressRecord(result.results[0]);
+  if(recorded.results[0]?.lesson!==lesson||recorded.results[0].mode!==mode)
+    return reply({error:"Cette progression a changé sur un autre appareil.",progress},409);
+  return reply({ok:true,progress,revision:progress.revision,evidence:await evidence(db,username)});
 }
 
 async function api(request,env,path) {
@@ -141,14 +282,22 @@ async function api(request,env,path) {
   const username=user.username;
   if(request.method==="GET"){
     if(path==="/api/me"){
-      const {results}=await db.prepare("SELECT lesson,mode,state FROM progress WHERE username=? ORDER BY updated DESC")
-        .bind(username).all();
-      return reply({user,progress:results.map(({lesson,mode,state})=>({lesson,mode,...JSON.parse(state)})),
-        evidence:await evidence(db,username)});
+      const [progress,activities,history,learning,focus]=await Promise.all([
+        db.prepare(progressQuery+" WHERE username=? ORDER BY updated DESC").bind(username).all(),
+        db.prepare("SELECT id,state,revision FROM activities WHERE username=?").bind(username).all(),
+        db.prepare("SELECT id,state,revision FROM activity_events WHERE username=? AND state IS NOT NULL ORDER BY updated DESC")
+          .bind(username).all(),
+        evidence(db,username),
+        classFocus(db),
+      ]);
+      return reply({user,progress:progress.results.map(progressRecord),
+        activities:activities.results.map(activityRecord),activityHistory:history.results.map(activityRecord),
+        classFocus:focus,evidence:learning});
     }
     if(path==="/api/students"&&user.role==="teacher"){
       const {results}=await db.prepare(`SELECT username,name,grade,
-        (SELECT count(*) FROM progress WHERE progress.username=users.username AND json_extract(state,'$.done')=1) completed
+        (SELECT count(*) FROM progress WHERE progress.username=users.username AND json_extract(state,'$.done')=1) completed,
+        (SELECT count(*) FROM activity_events WHERE activity_events.username=users.username AND state IS NOT NULL) activitiesCompleted
         FROM users WHERE role='student' ORDER BY name`).all();
       return reply({students:results});
     }
@@ -163,24 +312,9 @@ async function api(request,env,path) {
     await db.prepare("UPDATE users SET grade=? WHERE username=?").bind(body.grade,username).run();
     return reply({ok:true});
   }
-  if(path==="/api/progress"&&user.role==="student"){
-    const {lesson,mode,event}=body;
-    if(!Object.hasOwn(lessons,lesson)||!modes.includes(mode)||typeof event!=="string"||!/^[-a-zA-Z0-9]{8,64}$/.test(event))
-      return fail("Progression invalide.",400);
-    const state=sanitizeProgress(lesson,mode,body.state);
-    if(!state) return fail("Progression invalide.",400);
-    const updated=Date.now(), payload=JSON.stringify(state);
-    // A duplicate event is harmless. The two writes are atomic in D1 batch.
-    await db.batch([
-      db.prepare(`INSERT INTO progress SELECT ?,?,?,?,?
-        WHERE NOT EXISTS (SELECT 1 FROM progress_history WHERE username=? AND event=?)
-        ON CONFLICT(username,lesson,mode) DO UPDATE SET state=excluded.state,updated=excluded.updated`)
-        .bind(username,lesson,mode,payload,updated,username,event),
-      db.prepare("INSERT OR IGNORE INTO progress_history VALUES (?,?,?,?,?,?)")
-        .bind(username,event,lesson,mode,payload,updated),
-    ]);
-    return reply({ok:true,evidence:await evidence(db,username)});
-  }
+  if(path==="/api/activity"&&user.role==="student") return saveActivity(db,username,body);
+  if(path==="/api/progress"&&user.role==="student") return saveProgress(db,username,body);
+  if(path==="/api/class-focus"&&user.role==="teacher") return setClassFocus(db,body);
   if(["/api/students","/api/reset"].includes(path)&&user.role==="teacher"){
     const account=typeof body.username==="string"?body.username.trim().toLowerCase():"";
     if(!/^[a-z0-9-]{3,24}$/.test(account)) return fail("Identifiant invalide.",400);
@@ -207,7 +341,14 @@ export default {
   async fetch(request,env){
     const path=new URL(request.url).pathname;
     if(path==="/api/health"&&request.method==="GET"){
-      try { await env.DB.prepare("SELECT 1 FROM users LIMIT 1").all(); return reply({ok:true,storage:"d1"}); }
+      try {
+        await env.DB.batch([
+          env.DB.prepare("SELECT revision FROM activity_events LIMIT 1"),
+          env.DB.prepare("SELECT revision FROM progress_revisions LIMIT 1"),
+          env.DB.prepare("SELECT chapter FROM class_focus LIMIT 1"),
+        ]);
+        return reply({ok:true,storage:"d1",activities:true});
+      }
       catch { return fail("Base indisponible.",503); }
     }
     if(path.startsWith("/api/")){

@@ -113,8 +113,9 @@ Object.assign(writtenPractice,{
 
 export const tariffValues = (distance, fee=4) => [3*distance,2*distance+fee];
 
-export function tariffQuestions(seed, level) {
-  const fee=3+(seed%3), [a,b]=tariffValues(fee,fee);
+export function tariffQuestions(seed, level, version=2) {
+  const fee=version>=4?2+(seed%6):3+(seed%3);
+  const [a,b]=tariffValues(fee,fee);
   const near=fee-1, far=fee+2;
   const graph={fee};
   return [
@@ -153,10 +154,11 @@ export function commonFactor(a,b) {
   return Math.abs(a);
 }
 
-export function irreducibleQuestions(seed, level) {
+export function irreducibleQuestions(seed, level, version=3) {
   const pairs=[[4,3],[5,7],[3,8],[7,9],[5,8],[8,11]];
   const [a,b]=pairs[seed%pairs.length];
-  const factor=[6,10,12,14,15][Math.floor(seed/pairs.length)%5];
+  const factors=version>=4?[4,6,8,9,10,12,14,15,18,20,21,25]:[6,10,12,14,15];
+  const factor=factors[Math.floor(seed/pairs.length)%factors.length];
   const n=a*factor,d=b*factor;
   const example=`${n}/${d}`;
   const check=choose(`Quel nombre peut diviser à la fois ${n} et ${d}, sans reste ?`,[String(n+d),String(factor),String(n*d)],1,
@@ -182,4 +184,58 @@ export function irreducibleQuestions(seed, level) {
       `Le seul diviseur commun de ${a} et ${b} est 1. La fraction est irréductible.`,
       "Cherche un diviseur commun, pas seulement un diviseur du numérateur."),
   ];
+}
+
+export function reasoningQuestions(lesson,seed){
+  const n=2+seed%11;
+  if(lesson==="entiers6"){
+    const number=100000*n+7304;
+    const thousand=Math.floor(number/1000);
+    const tens=Math.floor(number/10);
+    const base=1000*n;
+    return [
+      {prompt:`Écris en chiffres ${n} milliers et quatre cent trente-six unités.`,answer:base+436,explain:`${n} × 1 000 + 436 = ${base+436}.`},
+      {prompt:`Quel est le nombre de milliers complets dans ${number} ?`,answer:thousand,explain:`${number} = 1 000 × ${thousand} + 304.`},
+      {prompt:`Quel est le chiffre des dizaines de ${number} ?`,answer:0,explain:`Les trois derniers chiffres sont 304. Il y a 0 dizaine dans 304, même si ${number} contient ${tens} dizaines complètes.`},
+      choose(`Quel encadrement de ${number} utilise deux milliers consécutifs ?`,[
+        `${thousand*1000} < ${number} < ${(thousand+1)*1000}`,
+        `${thousand*1000} < ${number} < ${(thousand+2)*1000}`,
+        `${(thousand+1)*1000} < ${number} < ${(thousand+2)*1000}`],0,
+        "On repère le millier inférieur et le millier immédiatement supérieur."),
+      {prompt:`Sur une demi-droite graduée, deux traits voisins sont marqués ${base} et ${base+250}. Quel nombre marque le troisième trait après ${base} ?`,answer:base+750,explain:`Le pas est 250. Ajoute trois fois 250 à ${base}.`},
+    ];
+  }
+  if(lesson==="pythagore"||lesson==="pythagore3"){
+    const [a,b,c]=seed%2?[5,12,13]:[8,15,17];
+    const u=2+n%5;
+    const rounded=Math.round(Math.sqrt(16+u*u)*100)/100;
+    const symbol=String(rounded).replace(".",",");
+    return [
+      {prompt:`RST est rectangle en R. RS = ${a*n} cm et RT = ${b*n} cm. Calcule ST en cm.`,answer:c*n,
+        explain:`ST est l’hypoténuse. ST² = ${a*n}² + ${b*n}² = ${(c*n)**2}. ST = ${c*n} cm.`},
+      {prompt:`MNP est rectangle en N. MP = ${c*n} cm et NP = ${b*n} cm. Calcule MN en cm.`,answer:a*n,
+        explain:`MP est l’hypoténuse. MN² = MP² − NP² = ${(a*n)**2}. MN = ${a*n} cm.`},
+      choose("Le triangle KLM est rectangle en M. Quelle relation est correcte ?",["LM² = KL² + KM²","KL² = LM² + KM²","KM² = KL² + LM²"],1,
+        "Le côté opposé à l’angle droit est KL, donc KL est l’hypoténuse."),
+      {prompt:`Une planche forme la diagonale d’un rectangle de 4 m sur ${u} m. Donne sa longueur en mètres, arrondie au centième.`,answer:rounded,
+        explain:`Les côtés du rectangle forment un angle droit. La diagonale mesure √${16+u*u} m, soit environ ${symbol} m.`},
+      choose(`Une échelle de ${c*n} m est appuyée contre un mur perpendiculaire au sol. Son pied est à ${a*n} m du mur. Quel calcul donne la hauteur atteinte ?`,
+        [`√(${c*n}² − ${a*n}²)`,`√(${c*n}² + ${a*n}²)`,`${c*n} − ${a*n}`],0,
+        "L’échelle est l’hypoténuse. On soustrait les carrés avant de prendre la racine."),
+    ];
+  }
+  if(lesson==="fonctions"){
+    const m=2+n%4;
+    const y=m*n+3;
+    return [
+      {prompt:`Soit f(x) = ${m}x + 3. Quelle est l’image de ${n} ?`,answer:y,explain:`f(${n}) = ${m} × ${n} + 3 = ${y}.`},
+      {prompt:`Soit g(x) = ${m}x + 1. Quel est l’antécédent de ${y-2} ?`,answer:n,explain:`Résous ${m}x + 1 = ${y-2}. On retire 1, puis on divise par ${m}.`},
+      choose(`Pour h(x) = x², combien d’antécédents distincts le nombre ${n*n} a-t-il ?`,["Aucun","Un seul","Deux"],2,
+        `${n} et −${n} ont tous les deux pour carré ${n*n}.`),
+      choose(`Un tableau donne j(0) = 3 et j(2) = ${2*m+3}. Si j est affine, quelle formule lui correspond ?`,[
+        `j(x) = ${m}x + 3`,`j(x) = ${2*m}x + 3`,`j(x) = 3x + ${m+3}`],0,
+        `L’ordonnée à l’origine est 3. Le taux de variation vaut (${2*m+3} − 3) ÷ (2 − 0) = ${m}.`),
+      {prompt:`Pour k(x) = x² − ${m*m}, quelle est l’image de −${m} ?`,answer:0,explain:`Le carré de −${m} vaut ${m*m}. Il reste ${m*m} − ${m*m} = 0.`},
+    ];
+  }
 }

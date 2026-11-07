@@ -113,3 +113,24 @@ export function correctionTone(q, answer) {
   }
   return ["reprendre","Pas encore.",""];
 }
+
+explorations.pythagore3=explorations.pythagore;
+
+explorations.rotation4={
+  title:"Faire tourner un point autour d’un centre",
+  question:"Commence avec un quart de tour. Prédis la position de A′ si tu inverses le sens, puis vérifie. Que remarques-tu après un demi-tour ?",
+  controls:[["a","Nombre de quarts de tour",1,0,3],["b","Sens (0 horaire, 1 antihoraire)",0,0,1]],
+  draw(turns,direction){
+    const angle=turns*90, radians=(direction?-1:1)*angle*Math.PI/180;
+    const x=Math.round(90+50*Math.cos(radians)),y=Math.round(90+50*Math.sin(radians));
+    return `<figure class="lesson-figure"><svg viewBox="0 0 180 180" role="img" aria-label="A tourne de ${angle} degrés dans le sens ${direction?"antihoraire":"horaire"} autour de O">
+      <circle cx="90" cy="90" r="50" fill="none" stroke="var(--chart-grid)" stroke-dasharray="3 3"/>
+      <path d="M140 90H90" stroke="var(--chart-blue)" stroke-width="2"/>
+      <path d="M90 90L${x} ${y}" stroke="var(--chart-sand)" stroke-width="3"/>
+      <circle cx="90" cy="90" r="3" fill="var(--ink)"/><text x="80" y="107">O</text>
+      <circle cx="140" cy="90" r="4" fill="var(--chart-blue)"/><text x="147" y="83">A</text>
+      <circle cx="${x}" cy="${y}" r="4" fill="var(--chart-sand)"/><text x="${x+6}" y="${y+14}">A′</text>
+    </svg><figcaption>${angle}° dans le sens ${direction?"antihoraire":"horaire"}. Les points A et A′ sont à la même distance de O.</figcaption></figure>`;
+  },
+  recap:"Pour construire l’image de A, conserve la distance OA et tourne le rayon [OA) de l’angle donné, dans le sens indiqué. Un demi-tour donne le même point dans les deux sens.",
+};

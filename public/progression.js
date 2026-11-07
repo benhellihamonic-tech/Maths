@@ -1,4 +1,4 @@
-import {lessonGroups} from "./content.js";
+import {lessonGroups,questions,questionSignature} from "./content.js";
 
 // Les seuils sont communs aux quatre classes. Les preuves restent propres à une notion.
 export const ranks = [
@@ -24,7 +24,13 @@ export function updateEvidence(all, key, mode, state) {
     evidence.independent=Math.max(evidence.independent||0,independent);
     if (independent===5 && state.level>=1) {
       const perfect=evidence.perfect ??= [];
-      if (perfect.length<2 && !perfect.includes(state.seed)) perfect.push(state.seed);
+      const version=state.quizVersion??0;
+      const items=new Set(questions(key,state.seed,state.level,version).map(questionSignature));
+      // Deux séries autonomes doivent comporter cinq questions distinctes et
+      // proposer au moins trois nouvelles tâches dans la seconde série.
+      if (items.size===5 && perfect.length<2 &&
+          perfect.every(series=>JSON.parse(series).filter(item=>!items.has(item)).length>=3))
+        perfect.push(JSON.stringify([...items].sort()));
     }
   }
 }
@@ -59,10 +65,11 @@ export function xpRoutes(rank, evidence, progress, omit) {
 }
 
 export function classProgress(grade,evidence) {
-  const groups=lessonGroups(grade);
+  const allGroups=lessonGroups(grade);
+  const groups=grade==="4e"?allGroups.map(([domain,keys])=>[domain,keys.filter(key=>key!=="thales4"&&key!=="cosinus4")]).filter(([,keys])=>keys.length):allGroups;
   const keys=[...new Set(groups.flatMap(([,keys])=>keys))];
   const mastered=key=>(evidence[key]?.perfect?.length||0)>=2;
-  const xp=keys.reduce((total,key)=>total+lessonXP(evidence[key]),0);
+  const xp=[...new Set(allGroups.flatMap(([,list])=>list))].reduce((total,key)=>total+lessonXP(evidence[key]),0);
   const champion=Boolean(coverageComplete[grade]&&groups.length&&groups.every(([,list])=>list.length&&list.every(mastered)));
   const index=ranks.reduce((last,[threshold],i)=>xp>=threshold?i:last,0);
   return {xp,level:champion?ranks.length+1:index+1,title:champion?"Amiral":ranks[index][1],

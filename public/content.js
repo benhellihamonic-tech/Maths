@@ -1,4 +1,4 @@
-import {assessment, tariffQuestions, irreducibleQuestions} from "./assessment.js";
+import {assessment, tariffQuestions, irreducibleQuestions, reasoningQuestions} from "./assessment.js";
 import {curriculum} from "./curriculum.js";
 export const lessons = {
   division: {
@@ -18,53 +18,80 @@ export const modes = {lecon:"Leçon",quiz:"Quiz",jeu:"Jeu"};
 export const levels = ["Guidé","En autonomie","Défi"];
 
 export function questions(lesson, seed, level, version=0) {
-  if(lesson==="arithmetique3"&&version>=3) return irreducibleQuestions(seed,level);
-  if(lesson==="graphiques3"&&version>=2) return tariffQuestions(seed,level);
+  if(lesson==="arithmetique3"&&version>=3) return irreducibleQuestions(seed,level,version);
+  if(lesson==="graphiques3"&&version>=2) return tariffQuestions(seed,level,version);
+  if(version>=4) {
+    const reasoning=reasoningQuestions(lesson,seed);
+    if(reasoning) return reasoning;
+  }
   const random = n => ((Math.imul(seed ^ (n * 4051), 2654435761) >>> 0) % 113);
+  const used = new Set();
   return Array.from({length:5}, (_,i) => {
-    const checks=Object.hasOwn(assessment,lesson)?assessment[lesson]:[];
-    if(version>=1 && (i===3 || (i===4 && checks.length>1)) && checks.length) {
-      return checks[(i-3)%checks.length];
+    if(version<4) return quizItem(lesson,i,level,version,random);
+    for(let shift=0;shift<113;shift++){
+      const q=quizItem(lesson,i,level,version,n=>random(n)+shift);
+      const signature=questionSignature(q);
+      if(!used.has(signature)){used.add(signature);return q;}
     }
-    if (concepts[lesson]) {
-      if(curriculum[lesson]) {
-        const {min,max}=curriculum[lesson];
-        const n=min+random(i+2)%Math.min(max-min+1,5+level*4);
-        const [prompt,answer,explain]=curriculum[lesson].question(n,i);
-        return {prompt,answer,explain};
-      }
-      const n = lesson === "fractions" ? 1 + random(i+2)%8 : 2 + random(i+2)%(3+2*level);
-      let exercise = concepts[lesson].question(n);
-      if (lesson === "proportion" && i % 3 === 1)
-        exercise = [`${n} lots identiques coûtent ${4*n} €. Quel est le prix d’un lot ?`,4,`On divise le prix total par le nombre de lots : ${4*n} ÷ ${n} = 4 €.`];
-      if (lesson === "proportion" && i % 3 === 2)
-        exercise = [`Avec ${4*n} €, combien de lots à 4 € peut-on acheter ?`,n,`On cherche le nombre de lots : ${4*n} ÷ 4 = ${n}.`];
-      if (lesson === "relatifs" && i % 3 === 1)
-        exercise = [`Quel est le plus petit des deux nombres : −${n+2} ou −${n} ?`,-n-2,`−${n+2} se trouve plus à gauche sur la droite graduée.`];
-      if (lesson === "relatifs" && i % 3 === 2)
-        exercise = [`La sonde part de −${n} m et remonte de ${n+3} m. À quelle altitude arrive-t-elle ?`,3,`−${n} + ${n+3} = 3 m.`];
-      const [prompt,answer,explain] = exercise;
+    // A repeated static check is skipped in favour of another generated question.
+    for(let shift=0;shift<113;shift++){
+      const q=quizItem(lesson,i,level,0,n=>random(n)+shift,true);
+      const signature=questionSignature(q);
+      if(!used.has(signature)){used.add(signature);return q;}
+    }
+    return quizItem(lesson,i,level,version,random);
+  });
+}
+
+export function questionSignature(q){
+  // Identifie le travail demandé, y compris le support qui accompagne une consigne.
+  return JSON.stringify([q.prompt,q.graph,q.comparison,q.values,q.given,q.labels]);
+}
+
+function quizItem(lesson,i,level,version,random,skipInverse=version>=4){
+  const checks=Object.hasOwn(assessment,lesson)?assessment[lesson]:[];
+  if(version>=1 && (i===3 || (i===4 && checks.length>1)) && checks.length) {
+    return checks[(i-3)%checks.length];
+  }
+  if (concepts[lesson]) {
+    if(curriculum[lesson]) {
+      const {min,max}=curriculum[lesson];
+      const n=min+random(i+2)%Math.min(max-min+1,skipInverse?7+level*3:5+level*4);
+      const form=skipInverse&&i%3===2?i+1:i;
+      const [prompt,answer,explain]=curriculum[lesson].question(n,form);
       return {prompt,answer,explain};
     }
-    if (lesson === "division") {
-      const d = 4 + random(i+1) % (5+level*3);
-      const q = 3 + random(i+9) % (6+level*4);
-      const r = i === 4 ? 0 : 1 + random(i+20) % (d-1);
-      const n = d*q+r;
-      const kind = i % 3;
-      return {prompt:[
-        `Combien de groupes complets de ${d} peut-on former avec ${n} personnes ?`,
-        `On partage ${n} jetons en groupes de ${d}. Quel est le reste ?`,
-        `Il faut transporter ${n} personnes. Une navette a ${d} places. Combien de navettes faut-il au minimum ?`,
-      ][kind], answer:[q,r,q+Number(r>0)][kind], explain:`${n} = ${d} × ${q} + ${r}. ${kind===2 ? (r ? "Il faut une navette supplémentaire pour les passagers restants." : "Toutes les navettes sont pleines.") : `Le quotient est ${q} et le reste est ${r}.`}`};
-    }
-    const a = 2 + random(i+2) % (4+level*3);
-    const b = (random(i+11) % 8) * (level===2 && i%2 ? -1 : 1);
-    const x = (2 + random(i+19) % 7) * (level>0 && i%2 ? -1 : 1);
-    const op = b < 0 ? "−" : "+";
-    if (i===4) return {prompt:`Dans ${a}x + 2x ${op} ${Math.abs(b)}, quel est le coefficient de x après réduction ?`,answer:a+2,explain:`On additionne les coefficients de x. ${a}x + 2x = ${a+2}x.`};
-    return {prompt:`Calcule ${a}x ${op} ${Math.abs(b)} pour x = ${x}.`,answer:a*x+b,explain:`${a} × (${x}) ${op} ${Math.abs(b)} = ${a*x+b}.`};
-  });
+    const n = lesson === "fractions" ? 1 + random(i+2)%8 : 2 + random(i+2)%(skipInverse?5+3*level:3+2*level);
+    let exercise = concepts[lesson].question(n);
+    if (lesson === "proportion" && i % 3 === 1)
+      exercise = [`${n} lots identiques coûtent ${4*n} €. Quel est le prix d’un lot ?`,4,`On divise le prix total par le nombre de lots : ${4*n} ÷ ${n} = 4 €.`];
+    if (lesson === "proportion" && i % 3 === 2)
+      exercise = [`Avec ${4*n} €, combien de lots à 4 € peut-on acheter ?`,n,`On cherche le nombre de lots : ${4*n} ÷ 4 = ${n}.`];
+    if (lesson === "relatifs" && i % 3 === 1)
+      exercise = [`Quel est le plus petit des deux nombres : −${n+2} ou −${n} ?`,-n-2,`−${n+2} se trouve plus à gauche sur la droite graduée.`];
+    if (lesson === "relatifs" && i % 3 === 2)
+      exercise = [`La sonde part de −${n} m et remonte de ${n+3} m. À quelle altitude arrive-t-elle ?`,3,`−${n} + ${n+3} = 3 m.`];
+    const [prompt,answer,explain] = exercise;
+    return {prompt,answer,explain};
+  }
+  if (lesson === "division") {
+    const d = 4 + random(i+1) % (5+level*3);
+    const q = 3 + random(i+9) % (6+level*4);
+    const r = i === 4 ? 0 : 1 + random(i+20) % (d-1);
+    const n = d*q+r;
+    const kind = i % 3;
+    return {prompt:[
+      `Combien de groupes complets de ${d} peut-on former avec ${n} personnes ?`,
+      `On partage ${n} jetons en groupes de ${d}. Quel est le reste ?`,
+      `Il faut transporter ${n} personnes. Une navette a ${d} places. Combien de navettes faut-il au minimum ?`,
+    ][kind], answer:[q,r,q+Number(r>0)][kind], explain:`${n} = ${d} × ${q} + ${r}. ${kind===2 ? (r ? "Il faut une navette supplémentaire pour les passagers restants." : "Toutes les navettes sont pleines.") : `Le quotient est ${q} et le reste est ${r}.`}`};
+  }
+  const a = 2 + random(i+2) % (4+level*3);
+  const b = (random(i+11) % 8) * (level===2 && i%2 ? -1 : 1);
+  const x = (2 + random(i+19) % 7) * (level>0 && i%2 ? -1 : 1);
+  const op = b < 0 ? "−" : "+";
+  if (i===4) return {prompt:`Dans ${a}x + 2x ${op} ${Math.abs(b)}, quel est le coefficient de x après réduction ?`,answer:a+2,explain:`On additionne les coefficients de x. ${a}x + 2x = ${a+2}x.`};
+  return {prompt:`Calcule ${a}x ${op} ${Math.abs(b)} pour x = ${x}.`,answer:a*x+b,explain:`${a} × (${x}) ${op} ${Math.abs(b)} = ${a*x+b}.`};
 }
 
 export const games = {
