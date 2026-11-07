@@ -1,0 +1,1 @@
+INSERT OR IGNORE INTO users (username,name,grade,role,salt,password) VALUES ('marie-enseignante','Marie','','teacher','d088a1b2841bf47feee0a0d9c8307c69','5ff80191e6771dc478f585f8b05041793eefc80f675e067eca5dc901129cc45f');

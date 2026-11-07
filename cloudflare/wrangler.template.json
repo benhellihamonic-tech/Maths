@@ -1,0 +1,10 @@
+{
+  "name": "maths",
+  "main": "cloudflare/worker.mjs",
+  "compatibility_date": "2026-11-07",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{"pattern":"maths.benhelli.org","custom_domain":true}],
+  "assets": {"directory":"public","binding":"ASSETS","run_worker_first":true},
+  "d1_databases": [{"binding":"DB","database_name":"archipel-maths","database_id":"D1_DATABASE_ID","migrations_dir":"cloudflare/migrations"}]
+}
