@@ -1,0 +1,24 @@
+name: Vérifier Cloudflare
+on: [push, workflow_dispatch]
+permissions: {}
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    env:
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - name: Vérifier les accès en lecture
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${CF_TOKEN:?Secret CLOUDFLARE_API_TOKEN manquant}"
+          base=https://api.cloudflare.com/client/v4/accounts/29c23e9ef1f1f235ffec98705e4069e7
+          failed=0
+          for path in workers/scripts workers/scripts/science/settings workers/scripts/science/deployments; do
+            status=$(printf 'header = "Authorization: Bearer %s"\n' "$CF_TOKEN" |
+              curl -q -K - -sS --max-time 15 -o /dev/null -w '%{http_code}' "$base/$path")
+            echo "$path → HTTP $status"
+            [[ "$status" == 200 ]] || failed=1
+          done
+          exit "$failed"
