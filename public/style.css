@@ -139,3 +139,5 @@
   .course-list li { flex-wrap: wrap; }
   .chapter-question { padding-inline: .55rem; }
 }
+
+:root[data-theme="dark"] .lesson-figure svg .pythagoras-area { fill: #142b48; }

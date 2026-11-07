@@ -16,7 +16,7 @@ function squares(a,b) {
     ${polygons.map(({points,fill,value})=>{
       const x=points.reduce((sum,p)=>sum+p[0],0)/4,y=-points.reduce((sum,p)=>sum+p[1],0)/4;
       return `<polygon points="${polygon(points)}" fill="${fill}" stroke="#2b587e" stroke-width=".12"/>
-        <text x="${x}" y="${y+.35}" text-anchor="middle" font-size="1.05">${value}</text>`;
+        <text class="pythagoras-area" x="${x}" y="${y+.35}" text-anchor="middle" font-size="1.05">${value}</text>`;
     }).join("")}
     <polygon points="${polygon([[0,0],[0,a],[b,0]])}" fill="white" stroke="#2b587e" stroke-width=".14"/>
     <path d="M0 -.55h.55V0" fill="none" stroke="#2b587e" stroke-width=".12"/>

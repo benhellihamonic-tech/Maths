@@ -428,7 +428,7 @@ function captureTrainingAnswer(){
   if(form) training.answers[training.index]=String(Object.fromEntries(new FormData(form)).answer??"").trim();
 }
 async function finishTraining(){
-  if(!training||training.done||busy) return;
+  if(!training||training.done||busy||activityPending) return;
   captureTrainingAnswer();
   training.done=true;
   await saveTraining();render();
@@ -1025,7 +1025,7 @@ root.addEventListener("submit",async e=>{
   if(e.target.id==="login") return signIn(values.username,values.password,e.submitter?.value==="create");
   if(["division-lab","blocks-lab","tariff-lab","curve-lab"].includes(e.target.id)){checkChapterLab(e.target.id,values);return;}
   if(e.target.id==="course-answers"){
-    if(busy) return;
+    if(busy||activityPending) return;
     const id=e.target.dataset.courseRef;
     const answers=[...e.target.querySelectorAll("[name^=answer]")].map(field=>field.value.trim());
     const done=e.submitter?.value!=="draft";
@@ -1035,7 +1035,7 @@ root.addEventListener("submit",async e=>{
     return;
   }
   if(e.target.id==="training-answer"&&training&&!training.done){
-    if(busy) return;
+    if(busy||activityPending) return;
     if(training.deadline&&Date.now()>=training.deadline) return finishTraining();
     training.answers[training.index]=String(values.answer??"").trim();
     if(training.index+1===training.questions.length) training.done=true;
@@ -1107,6 +1107,7 @@ root.addEventListener("click",async e=>{
     renderTrainingIntro=training.ref;training=null;render();return;
   }
   if(("trainingBack" in d || "trainingFinish" in d)&&training&&!training.done){
+    if(busy||activityPending) return;
     if(busy) return;
     if(training.deadline&&Date.now()>=training.deadline) return finishTraining();
     if("trainingFinish" in d) return finishTraining();
@@ -1158,7 +1159,14 @@ root.addEventListener("click",async e=>{
   }
   if(d.action==="retry-activity"&&activityPending){
     const {id,state,event}=activityPending;
-    await saveActivity(id,state,event);render();return;
+    const form=root.querySelector("#course-answers");
+    const localDraft=form&&form.dataset.courseRef!==id
+      ?[...form.querySelectorAll("[name^=answer]")].map(field=>field.value):null;
+    await saveActivity(id,state,event);render();
+    const restored=root.querySelector("#course-answers");
+    if(localDraft&&restored?.dataset.courseRef===form.dataset.courseRef)
+      restored.querySelectorAll("[name^=answer]").forEach((field,i)=>{field.value=localDraft[i]??"";});
+    return;
   }
   if(d.action==="retry"&&pending) return commit(pending);
   if(busy||pending) return;
