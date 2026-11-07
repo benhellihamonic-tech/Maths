@@ -1,0 +1,47 @@
+name: Créer le Worker maths
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/create-maths-worker.yml]
+  workflow_dispatch:
+permissions: {}
+concurrency: create-cloudflare-maths
+jobs:
+  create:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    env:
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - name: Créer maths si ce Worker est absent
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${CF_TOKEN:?Secret Cloudflare manquant}"
+          api=https://api.cloudflare.com/client/v4/accounts/29c23e9ef1f1f235ffec98705e4069e7/workers/scripts
+          cloudflare() {
+            printf 'header = "Authorization: Bearer %s"\n' "$CF_TOKEN" |
+              curl -q -K - -sS --max-time 20 "$@"
+          }
+          cloudflare "$api" > workers.json
+          jq -e '.success and (.result | type == "array")' workers.json >/dev/null
+          if jq -e 'any(.result[]; .id == "maths")' workers.json >/dev/null; then
+            echo 'Le Worker maths existe déjà.'
+            exit 0
+          fi
+          cat > worker.mjs <<'EOF'
+          export default {
+            fetch() {
+              return new Response('Maths', {
+                headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+              });
+            },
+          };
+          EOF
+          cloudflare --request PUT \
+            --form 'metadata={"main_module":"worker.mjs","compatibility_date":"2026-11-07"};type=application/json' \
+            --form 'worker.mjs=@worker.mjs;type=application/javascript+module' \
+            "$api/maths" > response.json
+          jq '{success, errors, worker: .result.id}' response.json
+          jq -e '.success == true' response.json >/dev/null
+          cloudflare "$api/maths/deployments" | jq -e '.success and (.result.deployments | length > 0)' >/dev/null
