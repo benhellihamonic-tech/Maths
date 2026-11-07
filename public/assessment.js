@@ -147,3 +147,39 @@ assessment.pythagore[0].diagnostics={
   "0":["reprendre","AB est un côté de l’angle droit. Repère AC, le côté opposé à l’angle droit."],
   "2":["reprendre","BC touche l’angle droit. Le côté dont le carré doit être seul est AC."],
 };
+
+export function commonFactor(a,b) {
+  while(b) [a,b]=[b,a%b];
+  return Math.abs(a);
+}
+
+export function irreducibleQuestions(seed, level) {
+  const pairs=[[4,3],[5,7],[3,8],[7,9],[5,8],[8,11]];
+  const [a,b]=pairs[seed%pairs.length];
+  const factor=[6,10,12,14,15][Math.floor(seed/pairs.length)%5];
+  const n=a*factor,d=b*factor;
+  const example=`${n}/${d}`;
+  const check=choose(`Quel nombre peut diviser à la fois ${n} et ${d}, sans reste ?`,[String(n+d),String(factor),String(n*d)],1,
+    `${n} ÷ ${factor} = ${a} et ${d} ÷ ${factor} = ${b}. Les deux quotients sont entiers.`,
+    "Teste le même nombre sur les deux termes de la fraction.");
+  const method=choose(`Quelle écriture donne une fraction égale à ${example} ?`,[`${a}/${d}`,`${n}/${b}`,`${a}/${b}`],2,
+    `Pour conserver la valeur de la fraction, on divise les deux termes par le même nombre : ici ${factor}.`,
+    "Vérifie si le numérateur et le dénominateur ont été divisés par le même nombre.");
+  method.diagnostics={
+    "0":["presque","Tu as bien divisé le numérateur. Divise aussi le dénominateur par le même nombre."],
+    "1":["presque","Tu as bien divisé le dénominateur. Divise aussi le numérateur par le même nombre."],
+  };
+  return [
+    check,method,
+    {prompt:`On simplifie ${example} en divisant les deux termes par ${factor}. Quel est le nouveau dénominateur ?`,answer:b,
+      explain:`Le dénominateur est le terme du bas : ${d} ÷ ${factor} = ${b}.`,
+      diagnostics:{[a]:["presque",`Tu as trouvé le numérateur : ${n} ÷ ${factor} = ${a}. On te demande le terme du bas.`]}},
+    fraction(`Rends ${example} irréductible. Donne le résultat sous forme de fraction.`,[a,b],
+      `On divise ${n} et ${d} par ${factor} pour obtenir ${a}/${b}. ${a} et ${b} n’ont aucun diviseur commun supérieur à 1.`,true),
+    level===2 ? {prompt:`Quel est le plus grand diviseur commun de ${n} et ${d} ?`,answer:factor,
+      explain:`Leur quotient par ${factor} donne ${a} et ${b}, qui n’ont pas de diviseur commun supérieur à 1. Le plus grand diviseur commun est donc ${factor}.`}
+      : choose(`Pourquoi peut-on s’arrêter à ${a}/${b} ?`,["Les deux termes sont différents.","Aucun entier supérieur à 1 ne divise les deux termes.","Le numérateur et le dénominateur sont tous les deux impairs."],1,
+      `Le seul diviseur commun de ${a} et ${b} est 1. La fraction est irréductible.`,
+      "Cherche un diviseur commun, pas seulement un diviseur du numérateur."),
+  ];
+}

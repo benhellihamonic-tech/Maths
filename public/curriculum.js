@@ -13,6 +13,7 @@ function island(grade, domain, key, title, mission, rule, input, output, calcula
   curriculum[key]={
     grade,domain,title,mission,summary:rule,help:rule,intro:prompt(example),icon,tag,
     control:input,label:output,initial:example,min,max,targets,related,relation,
+    worked:n=>[prompt(n),settings.answer?settings.answer(n):calculate(n)],
     model:calculate,equation,
     question(n,i){
       const result=settings.answer?settings.answer(n):calculate(n);
@@ -177,3 +178,5 @@ island("4e","mesure","conversions4","Vitesses et unités composées","Le loch du
 island("3e","proportion","graphiques3","Équations et comparaisons graphiques","La rencontre des deux routes","À une distance donnée, compare les hauteurs des deux droites. La droite la plus basse donne le tarif le moins cher. Au croisement, les prix sont égaux.","Écart fixe entre les tarifs à zéro","abscisse de l’intersection de 3x et de 2x + écart",n=>n,n=>`Pour quelle valeur de x les tarifs 3x et 2x + ${n} sont-ils égaux ?`,"affine3","Une même solution peut être lue graphiquement ou calculée.");
 
 curriculum.graphiques3.intro="Deux compagnies proposent des tarifs différents. À partir de quelle distance l’une devient-elle moins chère que l’autre ?";
+
+curriculum.arithmetique3.intro="Choisis un diviseur commun et transforme une fraction étape par étape, jusqu’à ce qu’elle soit irréductible.";

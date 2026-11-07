@@ -1,4 +1,4 @@
-const CACHE = "archipel-interface-v10";
+const CACHE = "archipel-interface-v12";
 const FILES = ["/", "/style.css", "/app.js", "/content.js", "/curriculum.js", "/assessment.js", "/progression.js", "/pedagogie.js", "/manifest.webmanifest",
   "/icon.svg", "/icon-192.png", "/icon-512.png", "/atlas.svg"];
 self.addEventListener("install", event => event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES))));

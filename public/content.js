@@ -1,4 +1,4 @@
-import {assessment, tariffQuestions} from "./assessment.js";
+import {assessment, tariffQuestions, irreducibleQuestions} from "./assessment.js";
 import {curriculum} from "./curriculum.js";
 export const lessons = {
   division: {
@@ -18,6 +18,7 @@ export const modes = {lecon:"Leçon",quiz:"Quiz",jeu:"Jeu"};
 export const levels = ["Guidé","En autonomie","Défi"];
 
 export function questions(lesson, seed, level, version=0) {
+  if(lesson==="arithmetique3"&&version>=3) return irreducibleQuestions(seed,level);
   if(lesson==="graphiques3"&&version>=2) return tariffQuestions(seed,level);
   const random = n => ((Math.imul(seed ^ (n * 4051), 2654435761) >>> 0) % 113);
   return Array.from({length:5}, (_,i) => {

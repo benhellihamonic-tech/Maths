@@ -1,5 +1,5 @@
 import {explorations, correctionTone} from "./pedagogie.js";
-import {writtenPractice, tariffValues} from "./assessment.js";
+import {writtenPractice, tariffValues, commonFactor} from "./assessment.js";
 import {lessons, modes, levels, questions, games, concepts, connections, lessonGroups} from "./content.js";
 import {displayNumber} from "./curriculum.js";
 import {classProgress, lessonXP, ranks, updateEvidence, xpRoutes} from "./progression.js";
@@ -15,7 +15,7 @@ let installPrompt, selectedDomain = "";
 let notice = "", error = "", feedback = "", pending = null, help = false, filter = "", query = "";
 const clean = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
 const cap = (n,a,b) => Math.max(a,Math.min(b,n));
-const fresh = (level=0) => ({step:0,done:false,quizVersion:2,seed:Math.floor(Math.random()*0x7fffffff),level,answers:[],stars:0,help:false,game:[]});
+const fresh = (level=0) => ({step:0,done:false,quizVersion:3,seed:Math.floor(Math.random()*0x7fffffff),level,answers:[],stars:0,help:false,game:[]});
 const route = () => location.hash.slice(2).split("/");
 const go = path => { location.hash = "/" + path; };
 const get = (lesson,mode) => progress.find(p=>p.lesson===lesson && p.mode===mode);
@@ -200,15 +200,15 @@ function tariffGraph(fee=4, distance=null) {
   const px=x=>50+32*x, py=y=>218-6*y;
   const series=(start,end,color,dash="")=>`<path d="M${px(0)} ${py(start)}L${px(10)} ${py(end)}" fill="none" stroke="${color}" stroke-width="3" stroke-dasharray="${dash}"/>`;
   const [a,b]=distance===null?[]:tariffValues(distance,fee);
-  const marker=distance===null?"":`<path d="M${px(distance)} 218V${py(Math.max(a,b))}" stroke="#536b62" stroke-dasharray="3 4"/>
+  const marker=distance===null?"":`<path d="M${px(distance)} 218V${py(Math.max(a,b))}" stroke="#45627c" stroke-dasharray="3 4"/>
     <circle cx="${px(distance)}" cy="${py(b)}" r="6" fill="#9a5121" stroke="white" stroke-width="1.5"/>
-    <circle cx="${px(distance)}" cy="${py(a)}" r="${a===b?3:5}" fill="#176453" stroke="white" stroke-width="1.5"/>`;
+    <circle cx="${px(distance)}" cy="${py(a)}" r="${a===b?3:5}" fill="#11739c" stroke="white" stroke-width="1.5"/>`;
   return `<figure class="tariff-graph"><svg viewBox="0 0 392 260" role="img" aria-label="Tarifs Alizé et Brise selon la distance">
-    ${Array.from({length:33},(_,y)=>`<path d="M50 ${py(y)}H370" stroke="${y%4===0?"#b9cdbf":"#e3eae2"}"/>${y%4===0?`<text x="42" y="${py(y)+4}" text-anchor="end">${y}</text>`:""}`).join("")}
-    ${Array.from({length:11},(_,x)=>`<path d="M${px(x)} 26V218" stroke="#cedbce"/><text x="${px(x)}" y="237" text-anchor="middle">${x}</text>`).join("")}
-    <path d="M50 21V218H375" fill="none" stroke="#183632" stroke-width="2"/>
+    ${Array.from({length:33},(_,y)=>`<path d="M50 ${py(y)}H370" stroke="${y%4===0?"#a9c7de":"#e3eef8"}"/>${y%4===0?`<text x="42" y="${py(y)+4}" text-anchor="end">${y}</text>`:""}`).join("")}
+    ${Array.from({length:11},(_,x)=>`<path d="M${px(x)} 26V218" stroke="#ccdeee"/><text x="${px(x)}" y="237" text-anchor="middle">${x}</text>`).join("")}
+    <path d="M50 21V218H375" fill="none" stroke="#142b48" stroke-width="2"/>
     <text x="6" y="16">Prix (€)</text><text x="369" y="254" text-anchor="end">Distance (km)</text>
-    ${series(0,30,"#176453")}${series(fee,20+fee,"#9a5121","8 4")}${marker}
+    ${series(0,30,"#11739c")}${series(fee,20+fee,"#9a5121","8 4")}${marker}
     </svg><figcaption><span class="tariff-a">━ Alizé · 3 € par km</span><span class="tariff-b">┄ Brise · ${fee} € au départ + 2 € par km</span></figcaption></figure>`;
 }
 function tariffReading(distance) {
@@ -249,11 +249,36 @@ function explorationLesson(key, lesson) {
     <button class="primary" data-action="finish-lesson" ${busy?"disabled":""}>${active.done?"✓ Leçon terminée":"Terminer la leçon"} ↗</button>
     <a class="text-link next-link" href="#/atelier/${key}/quiz">Aller au quiz →</a></article>`;
 }
+const reductionMissions=[[24,18],[30,42],[45,60]];
+function fractionText(n,d){
+  return `<span class="fraction-display" aria-label="${n} sur ${d}"><span>${n}</span><span>${d}</span></span>`;
+}
+function fractionWorkbench(mode) {
+  const [startN,startD]=reductionMissions[mode==="jeu"?active.step:0];
+  const [n,d]=active.game.length===2?active.game:[startN,startD];
+  const title=mode==="jeu"?"Simplifie la fraction":"Quelle division conserve la fraction ?";
+  return `<article class="paper"><p class="eyebrow">${mode==="jeu"?`MISSION ${active.step+1} / 3`:"01 · CHOISIR UN DIVISEUR COMMUN"}</p>
+    <h2>${title}</h2>
+    <p>Choisis un nombre qui divise <strong>à la fois le numérateur et le dénominateur</strong>, sans reste. Répète jusqu’à ce qu’aucun entier supérieur à 1 ne divise les deux.</p>
+    <div class="fraction-workbench"><div><span>Au départ</span>${fractionText(startN,startD)}</div><span aria-hidden="true">=</span>
+      <div><span>Fraction actuelle</span>${fractionText(n,d)}</div></div>
+    <div class="pills" aria-label="Diviseurs à essayer">${[2,3,4,5,6,7,10,15].map(k=>`<button data-reduce="${k}" ${busy?"disabled":""}>Diviser par ${k}</button>`).join("")}</div>
+    ${feedback?`<p class="hint" role="status">${clean(feedback)}</p>`:""}
+    <button class="${mode==="jeu"?"primary":"quiet"}" data-action="check-irreducible" ${busy?"disabled":""}>Vérifier si je peux m’arrêter ↗</button>
+    <button class="quiet" data-action="reset-fraction" ${busy?"disabled":""}>Repartir du début</button>
+    ${mode==="lecon"?`<div class="course-recap"><p class="eyebrow">02 · À RETENIR</p>
+      <p>Diviser les deux termes par le même entier conserve la valeur de la fraction. Par exemple, 24/18 = 12/9 en divisant par 2, puis 12/9 = 4/3 en divisant par 3.</p>
+      <p>On s’arrête à 4/3 car 4 et 3 ont seulement 1 comme diviseur commun. On pouvait aussi passer directement de 24/18 à 4/3 en divisant par 6.</p></div>
+      <button class="primary" data-action="finish-lesson" ${busy?"disabled":""}>${active.done?"✓ Leçon terminée":"Terminer la leçon"} ↗</button>
+      <a class="text-link next-link" href="#/atelier/arithmetique3/quiz">Aller au quiz →</a>`:""}
+    </article>`;
+}
 function lessonView(key) {
   if(key==="graphiques3") return tariffLesson();
+  if(key==="arithmetique3") return fractionWorkbench("lecon");
   if(Object.hasOwn(explorations,key)) return explorationLesson(key,explorations[key]);
   const concept=concepts[key];
-  if(concept) return `<article class="paper"><p class="eyebrow">01 · MANIPULER</p><h2>${concept.title}</h2><p>${concept.intro}</p>
+  if(concept) return `<article class="paper"><p class="eyebrow">01 · MANIPULER</p><h2>${concept.title}</h2><p>${concept.worked?"Choisis une valeur, puis lis l’exemple qui lui correspond. Essaie de trouver le résultat avant de lire la réponse.":concept.intro}</p>
     <div class="controls">${sliders("a",concept.control,active.game[0]??concept.initial,concept.min,concept.max)}</div>
     <div id="model" class="manipulation"></div><p id="formula" class="formula"></p>
     <p class="eyebrow">02 · À RETENIR</p><p>${concept.summary}</p>
@@ -271,6 +296,7 @@ function lessonView(key) {
     <a class="text-link next-link" href="#/atelier/${key}/quiz">Aller au quiz →</a></article>`;
 }
 function model(key) {
+  if(key==="arithmetique3") return;
   if(key==="graphiques3"){
     const distance=Number(document.querySelector("#a").value);
     document.querySelector("#a-out").textContent=distance;
@@ -291,6 +317,13 @@ function model(key) {
   if(concept){
     const n=Number(document.querySelector("#a").value);
     document.querySelector("#a-out").textContent=n;
+    if(concept.worked){
+      const [prompt,answer]=concept.worked(n);
+      document.querySelector("#model").innerHTML=`<div class="live-example"><p><strong>Exemple avec ton réglage.</strong> ${clean(prompt)}</p>
+        <p><strong>Réponse.</strong> ${displayNumber(answer)}</p></div>`;
+      document.querySelector("#formula").textContent="";
+      return;
+    }
     document.querySelector("#model").innerHTML=key==="fractions"
       ? `<div class="fraction-bar" aria-label="${n} parts sur 8">${Array.from({length:8},(_,i)=>`<span class="${i<n?"taken":""}">${i+1}</span>`).join("")}</div>`
       : key==="relatifs"
@@ -336,10 +369,10 @@ function quizGraph(graph) {
   const px=x=>34+x*36, py=y=>188-y*26;
   const plot=(points,color,dash="")=>`<polyline points="${points.map(([x,y])=>px(x)+","+py(y)).join(" ")}" fill="none" stroke="${color}" stroke-width="3" stroke-dasharray="${dash}"/>`;
   return `<svg class="quiz-graph" viewBox="0 0 204 215" role="img" aria-label="Repère gradué, ${graph.second?"deux droites":"une droite"}">
-    ${Array.from({length:7},(_,y)=>`<path d="M34 ${py(y)}H178" stroke="#cedbce"/><text x="18" y="${py(y)+4}">${y}</text>`).join("")}
-    ${Array.from({length:5},(_,x)=>`<path d="M${px(x)} 32V188" stroke="#cedbce"/><text x="${px(x)-4}" y="207">${x}</text>`).join("")}
-    <path d="M34 28V188H188" fill="none" stroke="#183632" stroke-width="2"/>
-    ${plot(graph.points,"#27634d")}${graph.second?plot(graph.second,"#854919","5 3"):""}</svg>`;
+    ${Array.from({length:7},(_,y)=>`<path d="M34 ${py(y)}H178" stroke="#ccdeee"/><text x="18" y="${py(y)+4}">${y}</text>`).join("")}
+    ${Array.from({length:5},(_,x)=>`<path d="M${px(x)} 32V188" stroke="#ccdeee"/><text x="${px(x)-4}" y="207">${x}</text>`).join("")}
+    <path d="M34 28V188H188" fill="none" stroke="#142b48" stroke-width="2"/>
+    ${plot(graph.points,"#126e9e")}${graph.second?plot(graph.second,"#854919","5 3"):""}</svg>`;
 }
 function answerFields(q) {
   if(q.kind==="bars") return `<fieldset class="quiz-order"><legend>Règle les hauteurs des bâtons</legend>
@@ -435,6 +468,7 @@ function quizView(key) {
 function gameView(key) {
   const isDivision=key==="division";
   if(active.done) return `<article class="paper result"><p class="eyebrow">MISSION ACCOMPLIE</p><h2>${"★ ".repeat(active.stars||0)||"Trois étapes réussies"}</h2><p>Les trois étapes ont été validées. ${free?"Tu peux rejouer.":"Ton résultat est enregistré."}</p><button class="primary" data-action="restart">Rejouer ↗</button></article>`;
+  if(key==="arithmetique3") return fractionWorkbench("jeu");
   if(key==="graphiques3"){
     const distance=cap(active.game[0]??2,0,10);
     return `<article class="paper"><p class="eyebrow">MISSION ${active.step+1} / 3</p><h2>À toi de choisir le trajet</h2>
@@ -620,6 +654,32 @@ root.addEventListener("click",async e=>{
   if(busy||pending) return;
   if(d.reset) return manage("reset",{username:d.reset});
   if(!active||!lessons[key]||!modes[mode]) return;
+  if(key==="arithmetique3" && (mode==="lecon" || mode==="jeu") &&
+      (d.reduce || ["check-irreducible","reset-fraction"].includes(d.action))){
+    const [n,b]=active.game.length===2?active.game:reductionMissions[mode==="jeu"?active.step:0];
+    if(d.action==="reset-fraction"){
+      active={...active,game:[]};feedback="";render();return;
+    }
+    if(d.reduce){
+      const k=Number(d.reduce), left=n%k, right=b%k;
+      if(left||right){
+        feedback=`La division par ${k} ne convient pas. Reste pour ${n} : ${left}. Reste pour ${b} : ${right}. Il faut deux restes nuls.`;
+      }else{
+        active={...active,game:[n/k,b/k]};
+        feedback=`${n} ÷ ${k} = ${n/k} et ${b} ÷ ${k} = ${b/k}. Les deux termes ont été divisés par ${k} : la fraction garde sa valeur.`;
+      }
+      render();return;
+    }
+    const divisor=commonFactor(n,b);
+    if(divisor!==1){
+      feedback=`On peut encore simplifier : ${divisor} divise à la fois ${n} et ${b}.`;render();return;
+    }
+    feedback=`Bravo ! ${n} et ${b} n’ont aucun diviseur commun supérieur à 1. La fraction est irréductible.`;
+    if(mode==="lecon"){render();return;}
+    const message=feedback,stars=active.stars+1;
+    return commit({key,mode,state:{...active,step:active.step+1,done:active.step===2,stars,bestStars:Math.max(active.bestStars||0,stars),game:[]},
+      after:()=>{feedback=message;}});
+  }
   if(d.level!==undefined){active=fresh(Number(d.level));render();return;}
   if(d.adjust){
     if(key==="graphiques3"){

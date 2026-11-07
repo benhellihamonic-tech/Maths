@@ -4,9 +4,9 @@ function squares(a,b) {
   const area=a*a+b*b, c=Math.sqrt(area);
   // Le carré de l’hypoténuse est construit vers l’extérieur du triangle.
   const polygons=[
-    {points:[[0,0],[0,a],[-a,a],[-a,0]],fill:"#c0ebd0",value:a*a},
+    {points:[[0,0],[0,a],[-a,a],[-a,0]],fill:"#bceafa",value:a*a},
     {points:[[0,0],[b,0],[b,-b],[0,-b]],fill:"#f9e5ac",value:b*b},
-    {points:[[0,a],[b,0],[b+a,b],[a,a+b]],fill:"#e2d8f7",value:area},
+    {points:[[0,a],[b,0],[b+a,b],[a,a+b]],fill:"#d6e5ff",value:area},
   ];
   const points=polygons.flatMap(p=>p.points);
   const minX=Math.min(...points.map(([x])=>x))-1,maxX=Math.max(...points.map(([x])=>x))+1;
@@ -15,11 +15,11 @@ function squares(a,b) {
   return `<figure class="lesson-figure"><svg viewBox="${minX} ${-maxY} ${maxX-minX} ${maxY-minY}" role="img" aria-label="Triangle rectangle et carrés d’aires ${a*a}, ${b*b} et ${area}">
     ${polygons.map(({points,fill,value})=>{
       const x=points.reduce((sum,p)=>sum+p[0],0)/4,y=-points.reduce((sum,p)=>sum+p[1],0)/4;
-      return `<polygon points="${polygon(points)}" fill="${fill}" stroke="#31584c" stroke-width=".12"/>
+      return `<polygon points="${polygon(points)}" fill="${fill}" stroke="#2b587e" stroke-width=".12"/>
         <text x="${x}" y="${y+.35}" text-anchor="middle" font-size="1.05">${value}</text>`;
     }).join("")}
-    <polygon points="${polygon([[0,0],[0,a],[b,0]])}" fill="white" stroke="#31584c" stroke-width=".14"/>
-    <path d="M0 -.55h.55V0" fill="none" stroke="#31584c" stroke-width=".12"/>
+    <polygon points="${polygon([[0,0],[0,a],[b,0]])}" fill="white" stroke="#2b587e" stroke-width=".14"/>
+    <path d="M0 -.55h.55V0" fill="none" stroke="#2b587e" stroke-width=".12"/>
     </svg><figcaption>Les nombres écrits dans les carrés sont leurs <strong>aires</strong>, en unités carrées.</figcaption></figure>
     <p class="formula">${a}² + ${b}² = ${a*a} + ${b*b} = ${area}</p>
     <p>L’hypoténuse mesure <strong>${Number.isInteger(c)?c:`√${area} ≈ ${displayNumber(Math.round(c*100)/100)}`}</strong> unités.</p>`;
@@ -27,7 +27,7 @@ function squares(a,b) {
 function fractionRows(a,b) {
   const row=(parts,taken,tone)=>`<div class="fraction-strips" aria-label="${taken} parts sur ${parts}">${Array.from({length:Math.max(1,Math.ceil(taken/parts))},(_,unit)=>
     `<div class="fraction-strip ${tone}" style="--parts:${parts}">${Array.from({length:parts},(_,i)=>`<span class="${unit*parts+i<taken?"filled":""}"></span>`).join("")}</div>`).join("")}</div>`;
-  return `<div class="fraction-model"><p><strong>${a}/4</strong> · chaque quart est découpé en deux huitièmes.</p>${row(4,a,"mint")}${row(8,2*a,"mint")}
+  return `<div class="fraction-model"><p><strong>${a}/4</strong> · chaque quart est découpé en deux huitièmes.</p>${row(4,a,"lagoon")}${row(8,2*a,"lagoon")}
     <p><strong>${b}/8</strong> · cette bande est déjà graduée en huitièmes.</p>${row(8,b,"gold")}
     <p><strong>Le total</strong> · chaque bande complète vaut une unité.</p>${row(8,2*a+b,"total")}
     <p class="formula">${a}/4 + ${b}/8 = ${2*a}/8 + ${b}/8 = ${2*a+b}/8</p></div>`;
@@ -37,12 +37,12 @@ function affine(a,b,x) {
   const y=a*x+b;
   const slope=b+a;
   return `<figure class="lesson-figure"><svg viewBox="0 0 326 275" role="img" aria-label="Droite de la fonction et point (${x} ; ${y})">
-  ${Array.from({length:9},(_,i)=>i-4).map(n=>`<path d="M${px(n)} 12V260" stroke="#cedbce"/><text x="${px(n)}" y="271" text-anchor="middle">${n}</text>`).join("")}
-  ${Array.from({length:14},(_,i)=>-12+2*i).map(n=>`<path d="M45 ${py(n)}H301" stroke="#cedbce"/><text x="39" y="${py(n)+4}" text-anchor="end">${n}</text>`).join("")}
-  <path d="M45 ${py(0)}H306M${px(0)} 12V260" stroke="#183632" stroke-width="2"/>
-  <path d="M${px(-4)} ${py(-4*a+b)}L${px(4)} ${py(4*a+b)}" stroke="#176453" stroke-width="3"/>
+  ${Array.from({length:9},(_,i)=>i-4).map(n=>`<path d="M${px(n)} 12V260" stroke="#ccdeee"/><text x="${px(n)}" y="271" text-anchor="middle">${n}</text>`).join("")}
+  ${Array.from({length:14},(_,i)=>-12+2*i).map(n=>`<path d="M45 ${py(n)}H301" stroke="#ccdeee"/><text x="39" y="${py(n)+4}" text-anchor="end">${n}</text>`).join("")}
+  <path d="M45 ${py(0)}H306M${px(0)} 12V260" stroke="#142b48" stroke-width="2"/>
+  <path d="M${px(-4)} ${py(-4*a+b)}L${px(4)} ${py(4*a+b)}" stroke="#11739c" stroke-width="3"/>
   <path d="M${px(x)} ${py(0)}V${py(y)}H${px(0)}" fill="none" stroke="#9a5121" stroke-width="2" stroke-dasharray="4 3"/>
-  <circle cx="${px(0)}" cy="${py(b)}" r="4" fill="#176453"/>
+  <circle cx="${px(0)}" cy="${py(b)}" r="4" fill="#11739c"/>
   <circle cx="${px(x)}" cy="${py(y)}" r="5" fill="#9a5121"/>
   </svg><figcaption>Le point orange a pour abscisse <strong>${x}</strong> et pour ordonnée <strong>${y}</strong>.</figcaption></figure>
   <p class="formula">f(${x}) = ${a} × (${x}) + ${b} = ${y}</p>
@@ -51,8 +51,8 @@ function affine(a,b,x) {
 function decimals(n) {
   const cx=30+n*4;
   return `<figure class="lesson-figure decimal-figure"><svg viewBox="0 0 460 88" role="img" aria-label="Droite graduée de zéro à un, point à ${displayNumber(n/100)}">
-    <path d="M30 48H430" stroke="#235e50" stroke-width="2"/>
-    ${Array.from({length:101},(_,i)=>`<path d="M${30+i*4} 48v${i%10===0?12:5}" stroke="#52786d"/>`).join("")}
+    <path d="M30 48H430" stroke="#155b88" stroke-width="2"/>
+    ${Array.from({length:101},(_,i)=>`<path d="M${30+i*4} 48v${i%10===0?12:5}" stroke="#527fa2"/>`).join("")}
     ${Array.from({length:11},(_,i)=>`<text x="${30+i*40}" y="76" text-anchor="middle">${displayNumber(i/10)}</text>`).join("")}
     <circle cx="${cx}" cy="48" r="5" fill="#8d461f"/><text x="${cx}" y="35" text-anchor="middle" font-weight="bold">${displayNumber(n/100)}</text>
     </svg><figcaption>Entre deux dixièmes, il y a dix intervalles d’un centième.</figcaption></figure>
