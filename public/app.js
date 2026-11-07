@@ -19,7 +19,7 @@ let installPrompt, selectedDomain = "";
 let notice = "", error = "", feedback = "", pending = null, help = false, filter = "", query = "";
 const clean = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
 const cap = (n,a,b) => Math.max(a,Math.min(b,n));
-const fresh = (level=0) => ({step:0,done:false,quizVersion:4,seed:Math.floor(Math.random()*0x7fffffff),level,answers:[],stars:0,help:false,game:[]});
+const fresh = (level=0) => ({step:0,done:false,quizVersion:5,seed:Math.floor(Math.random()*0x7fffffff),level,answers:[],stars:0,help:false,game:[]});
 const route = () => location.hash.slice(2).split("/");
 const go = path => { location.hash = "/" + path; };
 const get = (lesson,mode) => progress.find(p=>p.lesson===lesson && p.mode===mode);
@@ -245,22 +245,92 @@ async function saveActivity(id,state,event=activityEvent()){
     return false;
   } finally {busy=false;}
 }
+const relationLabels={"<":"Inférieur à","=":"Égal à",">":"Supérieur à"};
+const comparisonNumber="[+−-]?\\d+(?:[ \\u00a0\\u202f]\\d{3})*(?:[,.]\\d+)?(?:/[+−-]?\\d+| × 10[⁻⁰¹²³⁴⁵⁶⁷⁸⁹]+)?";
+const comparisonPrompt=new RegExp(`^Compare (${comparisonNumber}) (?:et|à) (${comparisonNumber})(?: (en justifiant|en expliquant|en utilisant des dixièmes|à l’aide de produits en croix))?\\.?(?: (Souligne la première différence\\.))?$`,"i");
+function chapterComparison(item){
+  const match=comparisonPrompt.exec(item.prompt);
+  if(!match) return null;
+  const relation=comparisonValue(item.answer)||(item.answer.endsWith(" est plus grand.")?">":null);
+  return relation?{left:match[1],right:match[2],relation,justify:match[4]?"Indique le premier chiffre différent.":match[3]?"Justifie ton choix, ici ou sur ton cahier.":""}:null;
+}
+function comparisonValue(value){
+  return /^[<=>]$/.test(value)?value:new RegExp(`^${comparisonNumber}\\s*([<=>])\\s*${comparisonNumber}`).exec(value)?.[1];
+}
+function touchChoices(name,options,{value="",immediate=false,label="Choisis ta réponse",className=""}={}){
+  return `<div class="touch-select ${className}" data-touch-select ${immediate?'data-immediate':""}>
+    <input type="hidden" name="${name}" value="${clean(value)}">
+    <div class="touch-options" role="group" aria-label="${clean(label)}">${options.map(([key,text,description])=>`
+      <button type="button" class="touch-option" data-touch-value="${clean(key)}" aria-pressed="${String(key)===String(value)}"${description?` aria-label="${clean(description)}"`:""}>${clean(text)}</button>`).join("")}</div></div>`;
+}
+function comparisonFields(name,comparison,value,immediate=false,indexed=false){
+  const options=Object.entries(relationLabels).map(([symbol,label],i)=>[indexed?i:symbol,symbol,label]);
+  return `<div class="compare-line"><strong>${clean(comparison.left)}</strong>
+    ${touchChoices(name,options,{value:comparisonValue(value)||"",immediate,label:"Choisis le signe de comparaison",className:"compare-actions"})}
+    <strong>${clean(comparison.right)}</strong></div>`;
+}
+function chapterOrder(item){
+  if(!/^Range .+(?:du plus petit au plus grand|dans l’ordre croissant)\.?$/.test(item.prompt)&&!/^Range .+ et [−+\d][\d ,/]*\.$/.test(item.prompt)) return null;
+  const written=item.answer.replace(/\.$/,"").split(/\s*<\s*/);
+  if(written.length<3||written.some(part=>!new RegExp(`^${comparisonNumber}$`).test(part))) return null;
+  const prefix=item.prompt.slice(6);
+  if(written.some(part=>!prefix.includes(part))) return null;
+  const options=[...written].sort((a,b)=>prefix.indexOf(a)-prefix.indexOf(b));
+  return {options,expected:written.join(" < ")};
+}
+function orderFields(options,{name="",value=""}={}){
+  const stored=name?String(value).replace(/\.$/,"").split(/\s*<\s*/).filter(part=>options.includes(part)):[];
+  return `<div class="touch-order" data-touch-order>
+    ${name?`<input type="hidden" name="${name}" value="${clean(stored.join(" < "))}" data-order-answer>`:""}
+    <ol data-order-preview aria-live="polite">${stored.map(part=>`<li>${clean(part)}</li>`).join("")}</ol>
+    <div class="touch-options">${options.map((option,i)=>`
+      <button type="button" class="touch-option" data-order-option="${i}" ${stored.includes(option)?"disabled":""}>${clean(option)}</button>
+      <input type="hidden" ${name?"":`name="order${i}"`} value="${stored[i]===undefined?"":options.indexOf(stored[i])}" data-order-slot>`).join("")}</div>
+    <button type="button" class="quiet" data-order-undo ${stored.length?"":"disabled"}>Annuler le dernier choix</button></div>`;
+}
+function touchNumber(name,{value="",label="Ta réponse",min,max,open=false,required=false,fraction=true}={}){
+  const keys=["7","8","9","−","4","5","6",",","1","2","3",...(fraction?["/"]:[]),"0","⌫","Effacer"];
+  const names={"−":"Signe moins",",":"Virgule","/":"Barre de fraction","⌫":"Effacer le dernier caractère"};
+  return `<div class="touch-number"><label>${clean(label)} <input name="${name}" value="${clean(value)}" inputmode="decimal" maxlength="120" autocomplete="off"
+    ${min!==undefined?`data-min="${min}"`:""} ${max!==undefined?`data-max="${max}"`:""} ${required?"required":""}></label>
+    <details class="touch-keypad" ${open?"open":""}><summary>Pavé de calcul</summary>
+      <div class="touch-keys" role="group" aria-label="Pavé de calcul">${keys.map(key=>`<button type="button" data-touch-key="${key}"${names[key]?` aria-label="${names[key]}"`:""}>${key}</button>`).join("")}</div></details></div>`;
+}
 function chapterAnswers(items,values={}){
-  return items.map((item,i)=>`<fieldset class="chapter-question" data-item-skill="${item.skill}"><legend>${i+1}. ${clean(item.prompt)}</legend>
-    ${item.written?`<label>Ta démarche <textarea name="answer${i}" rows="3" maxlength="1200" placeholder="Tu peux aussi rédiger sur ton cahier.">${clean(values[i]??"")}</textarea></label>`:
-      `<label>Ta réponse <input name="answer${i}" value="${clean(values[i]??"")}" maxlength="120" autocomplete="off"></label>`}
-    </fieldset>`).join("");
+  return items.map((item,i)=>{
+    const comparison=chapterComparison(item), order=chapterOrder(item), value=values[i]??"";
+    const prompt=comparison?"Compare ces deux nombres.":order?"Touche les nombres du plus petit au plus grand.":item.prompt;
+    const name="answer"+i;
+    const [relation,...justification]=String(value).split("\n");
+    const field=comparison
+      ?comparisonFields(name,comparison,relation)+(comparison.justify?`<label>${comparison.justify}
+        <textarea name="reason${i}" rows="2" maxlength="1000">${clean(justification.join("\n"))}</textarea></label>`:"")
+      :order?orderFields(order.options,{name,value})
+      :item.written?`<label>Ta démarche <textarea name="${name}" rows="3" maxlength="1200" placeholder="Tu peux aussi rédiger sur ton cahier.">${clean(value)}</textarea></label>`
+      :touchNumber(name,{value});
+    return `<fieldset class="chapter-question" data-item-skill="${item.skill}"><legend>${i+1}. ${clean(prompt)}</legend>${field}</fieldset>`;
+  }).join("");
 }
 function chapterCorrect(item,value){
+  const comparison=chapterComparison(item);
+  if(comparison) return comparisonValue(String(value??"").split("\n")[0])===comparison.relation;
+  const order=chapterOrder(item);
+  if(order) return String(value??"").replace(/\.$/,"").split(/\s*<\s*/).join(" < ")===order.expected;
   return !item.written&&chapterAnswerCorrect(item,value??"");
 }
+function chapterResponseStatus(item,value){
+  const comparison=chapterComparison(item);
+  if(item.written&&!comparison&&!chapterOrder(item)) return "À vérifier";
+  const status=chapterCorrect(item,value)?"Bravo !":value?"À reprendre":"Sans réponse";
+  return status+(comparison?.justify?" · justification à vérifier":"");
+}
 function chapterBilan(chapter,items,answers,grade){
-  const auto=items.filter(item=>!item.written).length;
+  const auto=items.filter(item=>!item.written||chapterComparison(item)||chapterOrder(item)).length;
   const correct=items.filter((item,i)=>chapterCorrect(item,answers[i])).length;
   return `<section class="paper"><h2 id="course-feedback" tabindex="-1">Ton bilan</h2>
     <p>${auto?`${correct} / ${auto} réponses vérifiées automatiquement. `:""}Les démarches rédigées se comparent au corrigé, sur ton cahier ou à l’écran.</p>
-    ${items.map((item,i)=>`<details class="course-correction"><summary>${i+1}. ${clean(chapter.skills[item.skill])} · ${item.written?"À vérifier":chapterCorrect(item,answers[i])?"Bravo !":answers[i]?"À reprendre":"Sans réponse"}</summary>
-      <p>${clean(item.prompt)}</p>${answers[i]?`<p><b>Ta réponse</b> ${clean(answers[i])}</p>`:""}
+    ${items.map((item,i)=>`<details class="course-correction"><summary>${i+1}. ${clean(chapter.skills[item.skill])} · ${chapterResponseStatus(item,answers[i])}</summary>
+      <p>${clean(item.prompt)}</p>${answers[i]?`<p><b>Ta réponse</b> ${clean(answers[i]).replaceAll("\n","<br>")}</p>`:""}
       <p><b>Réponse attendue</b> ${clean(item.answer)}</p><p>${clean(item.explain)}</p>
       <p><a class="text-link" href="${courseHref(chapter,"exercices",grade)}/1/${item.skill}">Revoir cette compétence ↗</a></p></details>`).join("")}
     <div class="pills"><a class="quiet" href="${courseHref(chapter,"fiche",grade)}">Relire la fiche ↗</a>
@@ -269,11 +339,11 @@ function chapterBilan(chapter,items,answers,grade){
 function chapterLab(chapter,grade){
   const links=chapter.links;
   if(grade==="6e"&&links.includes("division")) return `<details class="course-lab"><summary>Expérimenter avec les navettes</summary>
-    <p>Pour 53 passagers, chaque navette offre 8 places. Prédit le quotient, le reste et le nombre de navettes à prévoir. Puis représente ton choix.</p>
+    <p><strong>53 passagers · 8 places par navette</strong></p><p>Répartis les passagers, puis indique combien de navettes il faut prévoir.</p>
     <form id="division-lab">
-      <label>Groupes complets <input name="q" type="number" min="0" max="10" required></label>
-      <label>Passagers restants <input name="r" type="number" min="0" max="53" required></label>
-      <label>Navettes nécessaires <input name="n" type="number" min="0" max="12" required></label>
+      ${touchNumber("q",{label:"Groupes complets",min:0,max:10,required:true,fraction:false})}
+      ${touchNumber("r",{label:"Passagers restants",min:0,max:53,required:true,fraction:false})}
+      ${touchNumber("n",{label:"Navettes nécessaires",min:0,max:12,required:true,fraction:false})}
       <button class="primary">Vérifier ma répartition</button>
     </form><div id="division-lab-result" role="status"></div></details>`;
   if(grade==="4e"&&links.includes("algebre")) return `<details class="course-lab"><summary>Comparer deux assemblages Algéblocks</summary>
@@ -281,23 +351,23 @@ function chapterLab(chapter,grade){
     <div class="blocks" aria-label="Deux rangées identiques contenant chacune un bloc x et trois unités">
       ${Array.from({length:2},()=>'<div><span>x</span><i>1</i><i>1</i><i>1</i></div>').join("")}</div>
     <form id="blocks-lab">
-      <label>Blocs x <input name="x" type="number" min="0" max="9" required></label>
-      <label>Unités <input name="units" type="number" min="0" max="20" required></label>
-      <label>Valeur pour x = 4 <input name="value" type="number" required></label>
+      ${touchNumber("x",{label:"Blocs x",min:0,max:9,required:true,fraction:false})}
+      ${touchNumber("units",{label:"Unités",min:0,max:20,required:true,fraction:false})}
+      ${touchNumber("value",{label:"Valeur pour x = 4",min:0,max:100,required:true,fraction:false})}
       <button class="primary">Comparer les assemblages</button>
     </form><div id="blocks-lab-result" role="status"></div></details>`;
   if(grade==="3e"&&chapter.id==="fonctions") return `<details class="course-lab"><summary>Explorer les antécédents sur une courbe</summary>
     <p>Pour chaque hauteur proposée, prédis combien d’antécédents elle possède, puis compare avec les intersections.</p>
     ${functionCurve()}
-    <form id="curve-lab"><label>Hauteur à chercher <select name="height"><option>4</option><option>9</option><option>10</option></select></label>
-    <label>Nombre d’antécédents <input name="count" type="number" min="0" max="2" required></label><button class="primary">Vérifier ↗</button></form>
+    <form id="curve-lab"><fieldset><legend>Choisis une hauteur.</legend>${touchChoices("height",[[4,4],[9,9],[10,10]],{value:4,label:"Hauteur"})}</fieldset>
+    <fieldset><legend>Combien d’antécédents ?</legend>${touchChoices("count",[[0,"Aucun"],[1,"Un"],[2,"Deux"]],{immediate:true,label:"Nombre d’antécédents"})}</fieldset></form>
     <div id="curve-lab-result" role="status"></div></details>`;
   if(grade==="3e"&&links.includes("graphiques3")) return `<details class="course-lab"><summary>Lire et vérifier le point d’égalité</summary>
     <p>Les droites représentent deux tarifs. Repère leur intersection. Quel prix commun se lit à cette distance ?</p>
     ${tariffGraph(5)}
     <form id="tariff-lab">
-      <label>Abscisse en km <input name="distance" type="number" min="0" max="10" required></label>
-      <label>Ordonnée en euros <input name="price" type="number" min="0" required></label>
+      ${touchNumber("distance",{label:"Distance en km",min:0,max:10,required:true,fraction:false})}
+      ${touchNumber("price",{label:"Prix en euros",min:0,max:100,required:true,fraction:false})}
       <button class="primary">Vérifier mon point</button>
     </form><div id="tariff-lab-result" role="status"></div></details>`;
   return "";
@@ -411,13 +481,13 @@ function restoreTraining(ref){
     .sort((a,b)=>b.state.updated-a.state.updated)[0];
   if(!candidate) return null;
   const [grade,type,id]=ref.split("/");
-  const questions=trainingSet(type,grade,id,candidate.state.seed);
+  const questions=trainingSet(type,grade,id,candidate.state.seed,candidate.state.version);
   return questions.length?{...candidate.state,ref,questions,activityId:candidate.id}:null;
 }
 async function saveTraining(){
   if(!training) return;
-  const {activityId,seed,answers,index,done,deadline}=training;
-  const saved=await saveActivity(activityId,{seed,answers:[...answers],index,done,deadline,updated:Date.now()});
+  const {activityId,seed,answers,index,done,deadline,version}=training;
+  const saved=await saveActivity(activityId,{seed,answers:[...answers],index,done,deadline,...(version?{version}:{}),updated:Date.now()});
   if(!saved&&!activityPending&&training?.activityId===activityId){
     const canonical=activities.get(activityId);
     training=canonical?{...training,...canonical.state}:null;
@@ -465,17 +535,17 @@ function trainingPage(type,id) {
       <div class="quiz-review">${training.questions.map((q,i)=>{
         const value=training.answers[i]??"", ok=trainingCorrect(q,value);
         return `<details><summary>${i+1}. ${clean(q.skill)} · ${ok?"Réussie":value?"À revoir":"Non répondue"}</summary>
-          <p>${clean(q.prompt)}</p><p><strong>Ta réponse.</strong> ${clean(value||"—")} · <strong>Réponse attendue.</strong> ${typeof q.answer==="number"?displayNumber(q.answer):clean(q.answer)}</p>
+          <p>${clean(q.prompt)}</p>${comparisonContext(q)}<p><strong>Ta réponse.</strong> ${clean(value||"—")} · <strong>Réponse attendue.</strong> ${typeof q.answer==="number"?displayNumber(q.answer):clean(q.answer)}</p>
           <p>${clean(q.explain)}</p></details>`;
       }).join("")}</div></section>`;
   }
   const q=training.questions[training.index], saved=training.answers[training.index]??"";
   return head+`<section class="paper"><p class="eyebrow">QUESTION ${training.index+1} / ${training.questions.length}
     ${training.deadline?' · <output id="training-clock" aria-label="Temps restant"></output>':""}</p><h2>${clean(q.prompt)}</h2>
-    <form id="training-answer" class="answer">${q.options?`<fieldset class="quiz-choice"><legend>Choisis une réponse</legend>
-      ${q.options.map(option=>`<label><input type="radio" name="answer" value="${clean(option)}" ${option===saved?"checked":""}> ${clean(option)}</label>`).join("")}</fieldset>`:
-      `<label>Ta réponse<input name="answer" value="${clean(saved)}" maxlength="80" autocomplete="off"></label>`}
-    <button class="primary">${training.index+1===training.questions.length?"Voir le bilan":"Question suivante"} ↗</button></form>
+    <form id="training-answer" class="answer">${q.compare?comparisonFields("answer",q.compare,saved,true):q.options
+      ?touchChoices("answer",q.options.map(option=>[option,option]),{value:saved,immediate:true})
+      :touchNumber("answer",{value:saved,open:true})}
+    <button class="${q.options?"quiet":"primary"}">${q.options?(saved?"Continuer":"Passer"):training.index+1===training.questions.length?"Voir le bilan":"Question suivante"} ↗</button></form>
     <div class="pills">${training.index?'<button class="quiet" data-training-back>Question précédente</button>':""}
     <button class="quiet" data-training-finish>Terminer la série</button></div></section>`;
 }
@@ -534,7 +604,7 @@ function activityJournal(){
       return chapter?`<li>${clean(chapter.title)} · ${mode==="evaluation"?"Sujet blanc "+(form==="2"?"B":"A"):"Entraînement"}</li>`:"";
     }
     const title=id==="belt"?`Ceinture ${beltColors[Number(mode)]}`:id==="can"?`Course aux nombres · fin de ${mode==="cm2"?"CM2":mode}`:classAutomatisms[grade]?.[Number(mode)]?.[1];
-    const items=trainingSet(id,grade,mode,row.state.seed);
+    const items=trainingSet(id,grade,mode,row.state.seed,row.state.version);
     const score=items.filter((item,i)=>trainingCorrect(item,row.state.answers?.[i]??"")).length;
     return title&&items.length?`<li>${clean(title)} · ${score}/${items.length}</li>`:"";
   }).join("")}</ul></section>`;
@@ -581,7 +651,14 @@ function atelier(key,mode) {
 function stepper(name,label,value,min,max) {
   return `<div class="stepper"><span>${label}</span><button data-adjust="${name}" data-delta="-1" ${value<=min?"disabled":""} aria-label="Diminuer ${label}">−</button><strong>${value}</strong><button data-adjust="${name}" data-delta="1" ${value>=max?"disabled":""} aria-label="Augmenter ${label}">+</button></div>`;
 }
-const sliders = (id,label,value,min,max) => `<label class="slider">${label} <strong id="${id}-out">${value}</strong><input id="${id}" type="range" min="${min}" max="${max}" value="${value}"></label>`;
+function sliders(id,label,value,min,max){
+  return `<div class="range-touch"><label class="slider">${clean(label)} <strong id="${id}-out">${value}</strong>
+    <input id="${id}" type="range" min="${min}" max="${max}" value="${value}"></label>
+    <div class="range-buttons">
+      <button type="button" data-range-step="${id}" data-delta="-1" aria-label="Diminuer ${clean(label)}">−</button>
+      <button type="button" data-range-step="${id}" data-delta="1" aria-label="Augmenter ${clean(label)}">+</button>
+    </div></div>`;
+}
 function tariffGraph(fee=4, distance=null) {
   const px=x=>50+32*x, py=y=>218-6*y;
   const series=(start,end,color,dash="")=>`<path d="M${px(0)} ${py(start)}L${px(10)} ${py(end)}" fill="none" stroke="${color}" stroke-width="3" stroke-dasharray="${dash}"/>`;
@@ -771,22 +848,22 @@ function quizGraph(graph) {
 function answerFields(q) {
   if(q.kind==="bars") return `<fieldset class="quiz-order"><legend>Règle les hauteurs des bâtons</legend>
     <div id="chart-draft">${quizChart(q.labels.map(label=>[label,0]),q.max)}</div>
-    ${q.labels.map((label,i)=>`<label>${label} <input type="range" min="0" max="${q.max}" value="0" name="bar${i}" data-chart-bar></label>`).join("")}</fieldset>`;
-  if(q.kind==="choice") return `<fieldset class="quiz-choice"><legend>Choisis une réponse</legend>${q.options.map((label,i)=>
-    `<label><input type="radio" name="answer" value="${i}" required> ${clean(label)}</label>`).join("")}</fieldset>`;
-  if(q.kind==="order") return `<fieldset class="quiz-order"><legend>Remets les étapes dans l’ordre</legend>${q.options.map((_,step)=>
-    `<label>Étape ${step+1}<select name="order${step}" required><option value="">Choisis une étape</option>${q.options.map((label,i)=>
-      `<option value="${i}">${clean(label)}</option>`).join("")}</select></label>`).join("")}</fieldset>`;
+    ${q.labels.map((label,i)=>`<div class="chart-row"><strong>${clean(label)}</strong>
+      ${touchChoices("bar"+i,Array.from({length:q.max+1},(_,n)=>[n,n]),{value:0,label:"Hauteur du bâton "+label,className:"chart-height"})}</div>`).join("")}</fieldset>`;
+  if(q.compare) return comparisonFields("answer",q.compare,"",true,true);
+  if(q.kind==="choice") return touchChoices("answer",q.options.map((label,i)=>[i,label]),{immediate:true});
+  if(q.kind==="order") return `<fieldset class="quiz-order"><legend>Touche les éléments dans le bon ordre.</legend>
+    ${orderFields(q.options)}</fieldset>`;
   if(q.kind==="point") return `<fieldset class="quiz-point"><legend>Choisis une intersection du quadrillage</legend>
     <div class="point-grid"><span></span>${Array.from({length:9},(_,i)=>`<b>${i-4}</b>`).join("")}
     ${Array.from({length:9},(_,row)=>{
       const y=4-row;
       return `<b>${y}</b>`+Array.from({length:9},(_,column)=>{
         const x=column-4, given=q.given.find(([,gx,gy])=>gx===x&&gy===y);
-        return `<label class="${x===0||y===0?"axis":""}"><input type="radio" name="answer" value="${x},${y}" aria-label="(${x} ; ${y})" required><span aria-hidden="true">${given?given[0]:"·"}</span></label>`;
+        return `<label class="${x===0||y===0?"axis":""}"><input type="radio" name="answer" data-touch-point value="${x},${y}" aria-label="(${x} ; ${y})" required><span aria-hidden="true">${given?given[0]:"·"}</span></label>`;
       }).join("");
     }).join("")}</div></fieldset>`;
-  return `<label>Ta réponse<input name="answer" inputmode="text" ${q.kind==="fraction"?'placeholder="Ex. 3/4"':""} required></label>`;
+  return touchNumber("answer",{label:q.kind==="fraction"?"Ta fraction":"Ta réponse",open:true,required:true});
 }
 function validateAnswer(q, values) {
   if(q.kind==="bars"){
@@ -795,11 +872,12 @@ function validateAnswer(q, values) {
   }
   if(q.kind==="order"){
     const value=q.options.map((_,i)=>Number(values["order"+i]));
-    if(new Set(value).size!==value.length) return {error:"Utilise chaque étape une seule fois."};
+    if(q.options.some((_,i)=>!/^\d+$/.test(values["order"+i]??""))||new Set(value).size!==value.length) return {error:"Utilise chaque étape une seule fois."};
     return {value,correct:q.answer.every((n,i)=>n===value[i])};
   }
   if(q.kind==="choice" || q.kind==="point"){
     const value=values.answer;
+    if(value===""||value===undefined) return {error:"Choisis une réponse."};
     return {value,correct:value===String(q.answer)};
   }
   const raw=(values.answer||"").trim().replace(/−/g,"-").replace(",",".").replace(/^[+-]?\d{1,3}(?:[ \u00a0\u202f]\d{3})+(?:\.\d+)?$/,part=>part.replace(/\s/g,""));
@@ -824,6 +902,9 @@ function responseLabel(q,value) {
   if(q.kind==="point") return "("+String(value).replace(","," ; ")+")";
   return typeof value==="number"?displayNumber(value):value;
 }
+function comparisonContext(q){
+  return q.compare?`<p class="comparison-context">${clean(q.compare.left)} ${clean((typeof q.answer==="number"?q.options[q.answer]:q.answer))} ${clean(q.compare.right)}</p>`:"";
+}
 function quizVisual(q) {
   return (q.values?quizChart(q.values):"")+(q.graph?quizGraph(q.graph):"")+(q.comparison?tariffGraph(q.comparison.fee):"");
 }
@@ -837,14 +918,14 @@ function correctionBlock(q,answer) {
 function quizView(key) {
   const series=questions(key,active.seed,active.level,active.quizVersion);
   if(feedback) return `<article class="paper"><p class="eyebrow">QUESTION ${active.step} / 5 · CORRECTION</p>
-    <p>${clean(series[active.step-1].prompt)}</p>${quizVisual(series[active.step-1])}
+    <p>${clean(series[active.step-1].prompt)}</p>${comparisonContext(series[active.step-1])}${quizVisual(series[active.step-1])}
     ${correctionBlock(series[active.step-1],active.answers.at(-1))}
     <button class="primary" data-action="continue-quiz">${active.done?"Voir mon bilan":"Question suivante"} →</button></article>`;
   const levelButtons=`<div class="pills">${levels.map((l,i)=>`<button data-level="${i}" aria-pressed="${active.level===i}" ${active.answers.length||busy?"disabled":""}>${l}</button>`).join("")}</div>`;
   if(active.done){
     const score=active.answers.filter(a=>a.correct).length;
     const review=active.answers.map((answer,i)=>`<details><summary>Question ${i+1} · ${answer.correct?"Réussie":"À revoir"}</summary>
-      <p>${clean(series[i].prompt)}</p>${correctionBlock(series[i],answer)}</details>`).join("");
+      <p>${clean(series[i].prompt)}</p>${comparisonContext(series[i])}${correctionBlock(series[i],answer)}</details>`).join("");
     return `<article class="paper result"><p class="eyebrow">✦ &nbsp; BILAN DU QUIZ</p><h2>${score}/5 réponses justes</h2><p>${active.answers.filter(a=>a.correct&&!a.help).length} réussies en autonomie · ${evidence[key]?.perfect?.length||0}/2 séries parfaites pour maîtriser la notion.</p>
       <div class="quiz-review">${review}</div>
       <button class="primary" data-action="restart">Nouvelle série ↗</button><a class="text-link next-link" href="#/atelier/${key}/lecon">Revoir la leçon →</a><a class="text-link next-link" href="#/atelier/${key}/jeu">Passer au jeu →</a></article>`;
@@ -852,8 +933,8 @@ function quizView(key) {
   const q=series[active.step];
   return `<article class="paper"><p class="eyebrow">QUESTION ${active.step+1} / 5</p>
     <div class="segments" aria-label="Question ${active.step+1} sur 5">${Array.from({length:5},(_,i)=>`<span class="${i<=active.step?"filled":""}"></span>`).join("")}</div>
-    ${levelButtons}<p class="quiz-goal">✦ Termine les cinq questions pour gagner des XP. Pour valider une série parfaite, choisis En autonomie ou Défi et réponds juste sans indice.</p><h2>${clean(q.prompt)}</h2>${quizVisual(q)}<form id="answer" class="answer">${answerFields(q)}
-    <button class="primary" ${busy?"disabled":""}>Vérifier ↗</button></form>
+    ${levelButtons}<h2>${clean(q.prompt)}</h2>${quizVisual(q)}<form id="answer" class="answer">${answerFields(q)}
+    <p data-answer-error role="alert"></p>${q.kind==="choice"?"":`<button class="primary" ${busy?"disabled":""}>Vérifier ↗</button>`}</form>
     <button class="quiet" data-action="help" aria-controls="quiz-help" aria-expanded="${help||active.level===0}">Indice et rappel de cours</button>
     <div id="quiz-help" class="hint" ${help||active.level===0?"":"hidden"}><p><strong>Indice.</strong> ${clean(q.hint||lessons[key].help)}</p>
       <p><strong>À retenir.</strong> ${clean(explorations[key]?.recap||lessons[key].summary)}</p></div>
@@ -877,7 +958,7 @@ function gameView(key) {
     return `<article class="paper"><p class="eyebrow">DÉFI ${active.step+1} / 3</p><h2>${clean(concept.mission)}</h2>
       <p>Trouve une valeur de départ qui donne <b>${expected} ${clean(concept.label)}</b>.</p>
       <details><summary>Voir un exemple de méthode</summary><p>${clean(concept.summary)}</p><p>${clean(concept.equation(concept.initial))}</p></details>
-      <form class="answer" id="concept-answer"><label>${clean(concept.control)} <input name="setting" type="number" step="1" min="${concept.min}" max="${concept.max}" required></label>
+      <form class="answer" id="concept-answer">${touchNumber("setting",{label:concept.control,min:concept.min,max:concept.max,open:true,required:true,fraction:false})}
       <button class="primary" ${busy?"disabled":""}>Valider ↗</button></form>
       ${feedback?`<p class="hint" role="status">${clean(feedback)}</p>`:""}</article>`;
   }
@@ -991,6 +1072,7 @@ async function commit(request) {
 }
 
 root.addEventListener("input",e=>{
+  if(e.target.hasAttribute?.("data-min")) e.target.setCustomValidity("");
   if(e.target.id==="course-search"){
     const normalize=value=>value.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu,"").trim();
     const q=normalize(e.target.value);
@@ -1008,12 +1090,6 @@ root.addEventListener("input",e=>{
   if(e.target.id==="search"){
     query=e.target.value;document.querySelector("#chapter-list").innerHTML=chapterList();
   }
-  if(e.target.hasAttribute?.("data-chart-bar")){
-    const [,key]=route();
-    const q=questions(key,active.seed,active.level,active.quizVersion)[active.step];
-    const sliders=[...document.querySelectorAll("[data-chart-bar]")];
-    document.querySelector("#chart-draft").innerHTML=quizChart(q.labels.map((label,i)=>[label,Number(sliders[i].value)]),q.max);
-  }
   if(e.target.type==="range"&&route()[0]==="atelier"&&route()[2]==="lecon"){
     model(route()[1]);
     active.game=["a","b","x"].map(id=>Number(document.querySelector("#"+id)?.value??0));
@@ -1022,12 +1098,23 @@ root.addEventListener("input",e=>{
 root.addEventListener("submit",async e=>{
   e.preventDefault();
   const values=Object.fromEntries(new FormData(e.target));
+  for(const field of e.target.querySelectorAll?.("[data-min][data-max]")??[]){
+    const n=Number(field.value.replace("−","-"));
+    if(!field.value.trim()||!Number.isInteger(n)||n<Number(field.dataset.min)||n>Number(field.dataset.max)){
+      field.setCustomValidity(`Choisis un entier de ${field.dataset.min} à ${field.dataset.max}.`);
+      field.reportValidity();
+      return;
+    }
+  }
   if(e.target.id==="login") return signIn(values.username,values.password,e.submitter?.value==="create");
   if(["division-lab","blocks-lab","tariff-lab","curve-lab"].includes(e.target.id)){checkChapterLab(e.target.id,values);return;}
   if(e.target.id==="course-answers"){
     if(busy||activityPending) return;
     const id=e.target.dataset.courseRef;
-    const answers=[...e.target.querySelectorAll("[name^=answer]")].map(field=>field.value.trim());
+    const answers=[...e.target.querySelectorAll("[name^=answer]")].map((field,i)=>{
+      const reason=String(values["reason"+i]??"").trim();
+      return field.value.trim()+(reason?"\n"+reason:"");
+    });
     const done=e.submitter?.value!=="draft";
     const ok=await saveActivity(id,{answers,done,updated:Date.now()});
     render();
@@ -1041,11 +1128,11 @@ root.addEventListener("submit",async e=>{
     if(training.index+1===training.questions.length) training.done=true;
     else training.index++;
     await saveTraining();render();
-    document.querySelector("#training-answer input")?.focus();return;
+    document.querySelector("#training-answer button")?.focus({preventScroll:true});return;
   }
   if(busy||pending) return;
   if(e.target.id==="concept-answer"){
-    const key=route()[1], concept=concepts[key], setting=Number(values.setting);
+    const key=route()[1], concept=concepts[key], setting=Number(String(values.setting).replace("−","-"));
     if(!concept||!Number.isInteger(setting)||setting<concept.min||setting>concept.max) return;
     if(concept.model(setting)!==concept.model(concept.targets[active.step])){
       feedback=`Avec ${setting}, tu obtiens ${displayNumber(concept.model(setting))}. Réessaie en utilisant la relation de la fiche.`;
@@ -1058,7 +1145,11 @@ root.addEventListener("submit",async e=>{
   if(e.target.id==="answer"){
     const key=route()[1], q=questions(key,active.seed,active.level,active.quizVersion)[active.step];
     const {value,correct,error:invalid}=validateAnswer(q,values);
-    if(invalid){error=invalid;render();return;}
+    if(invalid){
+      const message=e.target.querySelector("[data-answer-error]");
+      message.textContent=invalid;
+      return;
+    }
     const usedHelp=help||active.level===0;
     const state={...active,step:active.step+1,done:active.step===4,answers:[...active.answers,{value,correct,help:usedHelp,explain:q.explain}]};
     return commit({key,mode:"quiz",state,after:()=>{help=false;feedback=(correct?"Bien joué ! ":"À retenir. ")+q.explain;}});
@@ -1081,10 +1172,68 @@ async function manage(action,body){
   }catch(e){error=e.message;}
   finally{busy=false;render();}
 }
+function chooseTouch(button){
+  const group=button.closest("[data-touch-select]");
+  const field=group.querySelector("input");
+  field.value=button.dataset.touchValue;
+  for(const option of group.querySelectorAll("button")) option.setAttribute("aria-pressed",String(option===button));
+  if(group.classList.contains("chart-height")){
+    const q=questions(route()[1],active.seed,active.level,active.quizVersion)[active.step];
+    const values=new FormData(button.form);
+    document.querySelector("#chart-draft").innerHTML=quizChart(q.labels.map((label,i)=>[label,Number(values.get("bar"+i))]),q.max);
+  }
+  if(group.hasAttribute("data-immediate")) button.form.requestSubmit();
+}
+function pickOrder(button){
+  const group=button.closest("[data-touch-order]");
+  const fields=[...group.querySelectorAll("[data-order-slot]")];
+  const options=[...group.querySelectorAll("[data-order-option]")];
+  const undo=group.querySelector("[data-order-undo]");
+  const index=fields.findIndex(field=>field.value==="");
+  const filled=index<0?fields.length:index;
+  if(button===undo){
+    if(filled) fields[filled-1].value="";
+  }else if(filled<fields.length){
+    fields[filled].value=button.dataset.orderOption;
+  }
+  const values=fields.map(field=>field.value).filter(value=>value!=="");
+  const answer=group.querySelector("[data-order-answer]");
+  if(answer) answer.value=values.map(value=>options[Number(value)].textContent).join(" < ");
+  for(const option of options) option.disabled=values.includes(option.dataset.orderOption);
+  group.querySelector("[data-order-preview]").replaceChildren(...values.map(value=>{
+    const row=document.createElement("li");
+    row.textContent=options[Number(value)].textContent;
+    return row;
+  }));
+  undo.disabled=!values.length;
+  if(values.length===fields.length&&!answer) button.form.querySelector('button[type="submit"], button:not([type])')?.focus();
+  else (options.find(option=>!option.disabled)||undo).focus({preventScroll:true});
+}
+function useTouchKey(button){
+  const field=button.closest(".touch-number").querySelector("input");
+  const key=button.dataset.touchKey;
+  const value=field.value;
+  if(key==="Effacer") field.value="";
+  else if(key==="⌫") field.value=value.slice(0,-1);
+  else if(value.length<field.maxLength){
+    if(key==="−"&&!value) field.value="−";
+    else if(key!=="−"&&(key!=="/"||/^[−-]?\d+$/.test(value))&&(key!==","||!/[,/]/.test(value))) field.value+=key;
+  }
+  field.dispatchEvent(new Event("input",{bubbles:true}));
+}
 root.addEventListener("click",async e=>{
+  if(e.target.matches?.("[data-touch-point]")&&e.detail>0&&!busy&&!pending){e.target.form.requestSubmit();return;}
   const button=e.target.closest("button");
   if(!button) return;
   const d=button.dataset;
+  if("touchValue" in d){if(!busy&&!pending&&!activityPending) chooseTouch(button);return;}
+  if("touchKey" in d){useTouchKey(button);return;}
+  if(d.rangeStep){
+    const field=document.querySelector("#"+d.rangeStep);
+    if(field){field.value=cap(Number(field.value)+Number(d.delta),Number(field.min),Number(field.max));field.dispatchEvent(new Event("input",{bubbles:true}));}
+    return;
+  }
+  if("orderOption" in d||"orderUndo" in d){pickOrder(button);return;}
   const [,key,mode]=route();
   if(d.courseReset){
     await saveActivity(d.courseReset,{answers:[],done:false,updated:Date.now()});
@@ -1095,10 +1244,10 @@ root.addEventListener("click",async e=>{
     if(tab!=="defis") return;
     if(busy||activityPending) return;
     const seed=Math.floor(Math.random()*0x7fffffff), ref=[selectedGrade,type,id].join("/");
-    const series=trainingSet(type,selectedGrade,id,seed);
+    const series=trainingSet(type,selectedGrade,id,seed,1);
     if(!series.length) return;
     renderTrainingIntro=null;
-    training={ref,seed,activityId:"training/"+ref+"/"+activityEvent(),questions:series,answers:[],index:0,done:false,
+    training={ref,seed,version:1,activityId:"training/"+ref+"/"+activityEvent(),questions:series,answers:[],index:0,done:false,
       deadline:d.trainingStart==="chrono"?Date.now()+540000:null};
     await saveTraining();render();return;
   }
@@ -1160,12 +1309,16 @@ root.addEventListener("click",async e=>{
   if(d.action==="retry-activity"&&activityPending){
     const {id,state,event}=activityPending;
     const form=root.querySelector("#course-answers");
-    const localDraft=form&&form.dataset.courseRef!==id
-      ?[...form.querySelectorAll("[name^=answer]")].map(field=>field.value):null;
-    await saveActivity(id,state,event);render();
-    const restored=root.querySelector("#course-answers");
-    if(localDraft&&restored?.dataset.courseRef===form.dataset.courseRef)
-      restored.querySelectorAll("[name^=answer]").forEach((field,i)=>{field.value=localDraft[i]??"";});
+    const ok=await saveActivity(id,state,event);
+    if(user&&form&&form.dataset.courseRef!==id&&form===root.querySelector("#course-answers")){
+      const banner=button.closest(".retry");
+      if(ok) banner?.remove();
+      else{
+        const message=banner?.querySelector("p");
+        if(message) message.textContent=error;
+        if(!activityPending) button.remove();
+      }
+    }else render();
     return;
   }
   if(d.action==="retry"&&pending) return commit(pending);
@@ -1221,7 +1374,7 @@ root.addEventListener("click",async e=>{
     if(panel){panel.hidden=false;button.setAttribute("aria-expanded","true");}
     return;
   }
-  if(d.action==="continue-quiz"){feedback="";if(!active.done)notice="";render();return;}
+  if(d.action==="continue-quiz"){feedback="";if(!active.done)notice="";render();document.querySelector("#answer button")?.focus({preventScroll:true});return;}
   if(d.action==="restart") return commit({key,mode,state:{...fresh(active.level),bestStars:active.bestStars||active.stars||0},after:()=>{feedback="";help=false;}});
   if(d.action==="finish-lesson") return commit({key,mode,state:{...active,done:true,step:1}});
   if(d.action==="game-test"){

@@ -18,6 +18,12 @@ export const modes = {lecon:"Leçon",quiz:"Quiz",jeu:"Jeu"};
 export const levels = ["Guidé","En autonomie","Défi"];
 
 export function questions(lesson, seed, level, version=0) {
+  const numberComparison=version>=5?comparisonQuestion(lesson,seed):null;
+  if(numberComparison){
+    const series=questions(lesson,seed,level,4);
+    series[1]=numberComparison;
+    return series;
+  }
   if(lesson==="arithmetique3"&&version>=3) return irreducibleQuestions(seed,level,version);
   if(lesson==="graphiques3"&&version>=2) return tariffQuestions(seed,level,version);
   if(version>=4) {
@@ -43,9 +49,31 @@ export function questions(lesson, seed, level, version=0) {
   });
 }
 
+function comparisonQuestion(lesson,seed){
+  const n=2+seed%31;
+  const relationIndex=seed%3;
+  const variation=[1,0,-1][relationIndex];
+  let left,right,explain;
+  if(lesson==="decimaux6"){
+    left=`${n},4`;right=`${n},${40+variation}`;
+    explain=`${left} s’écrit aussi ${n},40. Compare ensuite les centièmes.`;
+  }else if(lesson==="entiers6"){
+    left=String(n*1000+507);right=String(n*1000+507+variation*10);
+    explain="Compare les chiffres de gauche à droite. Le premier rang différent décide de l’ordre.";
+  }else if(lesson==="relatifs"||lesson==="relatifs4"){
+    left=`−${n}`;right=`−${n-variation}`;
+    explain="Sur la droite graduée, le nombre le plus à gauche est le plus petit.";
+  }else if(["fractions6","rationnels5","rationnels3"].includes(lesson)){
+    left=`${n}/${n+2}`;right=`${2*n+variation}/${2*(n+2)}`;
+    explain=`Réécris ${left} sous la forme ${2*n}/${2*(n+2)}, puis compare les numérateurs.`;
+  }else return null;
+  return {kind:"choice",prompt:"Compare ces deux nombres.",compare:{left,right},options:["<","=",">"],answer:relationIndex,explain,
+    hint:"Choisis le signe à placer entre les deux nombres."};
+}
+
 export function questionSignature(q){
   // Identifie le travail demandé, y compris le support qui accompagne une consigne.
-  return JSON.stringify([q.prompt,q.graph,q.comparison,q.values,q.given,q.labels]);
+  return JSON.stringify([q.prompt,q.graph,q.comparison,q.values,q.given,q.labels,...(q.compare?[q.compare]:[])]);
 }
 
 function quizItem(lesson,i,level,version,random,skipInverse=version>=4){

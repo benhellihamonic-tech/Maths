@@ -141,3 +141,34 @@
 }
 
 :root[data-theme="dark"] .lesson-figure svg .pythagoras-area { fill: #142b48; }
+
+.touch-select, .touch-number { min-width: 0; }
+.touch-options, .touch-keys { display: flex; flex-wrap: wrap; gap: .4rem; }
+.touch-option, .touch-keys button {
+  min-height: 44px; min-width: 44px; padding: .38rem .7rem;
+  border: 1px solid var(--line); border-radius: .55rem; background: var(--white); color: var(--ink);
+  font: inherit; font-weight: 700; cursor: pointer; touch-action: manipulation;
+}
+.touch-option[aria-pressed="true"] { background: var(--lagoon-gradient); border-color: var(--chart-blue); box-shadow: inset 0 0 0 1px var(--chart-blue); }
+.touch-option:disabled { opacity: .6; }
+.compare-line { display: flex; justify-content: center; align-items: center; gap: clamp(.3rem, 2vw, 1rem); padding: .5rem 0; }
+.compare-line strong { font-size: clamp(1rem, 4vw, 1.5rem); text-align: center; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.compare-actions { flex: none; }
+.compare-actions .touch-options { flex-wrap: nowrap; gap: .25rem; }
+.compare-actions .touch-option { font-size: 1.35rem; padding: .25rem; }
+.touch-keypad { margin: .25rem 0 .5rem; max-width: 17rem; }
+.touch-keypad summary { padding: .45rem 0; }
+.touch-keys { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); }
+.touch-keys button { padding: .3rem; }
+.touch-keys [data-touch-key="Effacer"] { grid-column: span 2; }
+.course-lab form > .touch-number, .course-lab form > fieldset { flex: 1 1 12rem; min-width: 0; }
+.course-lab form > fieldset { border: 0; padding: 0; }
+.chart-row { margin: .5rem 0; }
+[data-order-preview]:empty, [data-answer-error]:empty { display: none; }
+[data-answer-error] { color: var(--sand-ink); font-weight: 650; flex-basis: 100%; }
+.answer > .touch-select { flex-basis: 100%; }
+.range-touch { display: flex; align-items: end; flex-wrap: wrap; gap: .5rem; max-width: 100%; }
+.range-touch .slider { flex: 1 1 8rem; min-width: 0; }
+.range-buttons { display: flex; gap: .3rem; }
+.range-buttons button { min-width: 44px; min-height: 44px; border-radius: .55rem; border: 1px solid var(--line); background: var(--white); color: var(--ink); font: inherit; cursor: pointer; }
+.comparison-context { font-size: 1.35rem; font-weight: 700; }

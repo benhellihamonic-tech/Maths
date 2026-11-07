@@ -495,7 +495,7 @@ export function chapterAnswerCorrect(item,value){
  return true;
 }
 
-export function trainingSet(type,grade,id,seed){
+export function trainingSet(type,grade,id,seed,version=0){
  const skills=type==="can"&&classRaces(grade).some(race=>race.level===id)?races[id]:
   type==="belt"?classBelts[grade]?.[Number(id)]:
   type==="auto"?classAutomatisms[grade]?.[Number(id)]?.[2]:undefined;
@@ -510,6 +510,17 @@ export function trainingSet(type,grade,id,seed){
    const n=2+((Math.imul(seed^(i*731+17),2654435761)>>>0)+attempt)%11;
    const m=2+((Math.imul(seed^(i*131+39),2246822519)>>>0)+Math.floor(attempt/11))%8;
    const variant=i+Math.floor(i/keys.length)+(seed%12)+attempt;
+   if(version>=1&&key==="fracCompare"){
+    const a=n%5+1, b=6, denominator=b*m, numerator=a*m;
+    const answer=["<","=",">"][variant%3];
+    const left=`${a}/${b}`, right=`${numerator+[1,0,-1][variant%3]}/${denominator}`;
+    const signature=left+"|"+right;
+    if(seen.has(signature)) continue;
+    seen.add(signature);
+    return {prompt:"Compare ces deux nombres.",compare:{left,right},answer,options:["<","=",">"],
+      explain:`${left} = ${numerator}/${denominator}. Les dénominateurs sont maintenant égaux : compare les numérateurs.`,
+      skill:"Comparer des fractions"};
+   }
    const [prompt,answer,explain,options,irreducible]=skill.build(n,m,variant);
    if(seen.has(prompt)) continue;
    seen.add(prompt);
