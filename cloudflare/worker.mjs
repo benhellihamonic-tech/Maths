@@ -100,7 +100,7 @@ function sanitizeProgress(lesson,mode,state) {
   const limit={quiz:5,jeu:3,lecon:1}[mode];
   if(state.step<0||state.step>limit||state.done!==(state.step===limit)) return null;
   const version=state.quizVersion??0;
-  if(![0,1].includes(version)) return null;
+  if(![0,1,2].includes(version)) return null;
   const checked={step:state.step,done:state.done,seed:state.seed,level:state.level,
     quizVersion:version,game:state.game,answers:[],stars:0,bestStars:0};
   if(mode==="jeu") {

@@ -110,3 +110,40 @@ Object.assign(writtenPractice,{
   code4:["Écris un programme qui demande un entier positif n, calcule 1 + 2 + … + n et affiche la somme. Teste-le pour 1, 3 et 5.","Initialise somme à 0 et compteur à 1. Répète n fois : ajoute compteur à somme puis augmente compteur de 1. Affiche somme. Les trois résultats attendus sont 1, 6 et 15.","Le compteur et la somme sont initialisés. L’affichage se fait après la boucle. Les trois tests passent."],
   transformations3:["Trace un triangle ABC dans un quadrillage. Construis son image par une homothétie de centre O et de rapport −2, puis explique où se trouvent les images des sommets.","Pour chaque sommet P, trace (OP). Place P′ sur cette droite de l’autre côté de O avec OP′ = 2 × OP. Relie les sommets images.","L’alignement, le changement de côté et le doublement des distances au centre sont visibles."],
 });
+
+export const tariffValues = (distance, fee=4) => [3*distance,2*distance+fee];
+
+export function tariffQuestions(seed, level) {
+  const fee=3+(seed%3), [a,b]=tariffValues(fee,fee);
+  const near=fee-1, far=fee+2;
+  const graph={fee};
+  return [
+    {prompt:`D’après le graphique, combien coûte le trajet avec Alizé pour ${near} km ?`,answer:3*near,
+      explain:`À ${near} km, on monte jusqu’à la droite Alizé puis on lit ${3*near} € sur l’axe vertical.`,
+      hint:"Pars de la distance sur l’axe horizontal.",comparison:graph},
+    {prompt:"À quelle distance les deux compagnies demandent-elles le même prix ?",answer:fee,
+      explain:`Les droites se coupent au point (${fee} ; ${a}). On lit ${fee} km sur l’axe horizontal.`,
+      hint:"Lis l’abscisse du point où les deux droites se croisent.",comparison:graph,
+      diagnostics:{[a]:["presque","Tu as lu l’ordonnée, qui donne le prix. Ici, on cherche la distance sur l’axe horizontal."]}},
+    {prompt:"Quel est le prix commun au point de croisement ?",answer:b,
+      explain:`Au point (${fee} ; ${a}), la première coordonnée est la distance et la seconde est le prix : ${b} €.`,
+      hint:"Cette fois, lis l’ordonnée du point de croisement.",comparison:graph,
+      diagnostics:{[fee]:["presque","Tu as lu l’abscisse, qui donne la distance. Ici, on cherche le prix sur l’axe vertical."]}},
+    {...choose(`Pour un trajet de ${far} km, quelle compagnie coûte le moins cher ?`,["Alizé","Brise","Les deux coûtent autant"],1,
+      `À ${far} km, la droite Brise est plus basse : ${2*far+fee} € contre ${3*far} €.`,
+      "À la même abscisse, compare les hauteurs des deux droites."),comparison:graph},
+    {...choose(level===2?"Pour quelles distances x, entre 0 et 10 km, a-t-on 3x ≤ 2x + "+fee+" ?":"Pour quelles distances Alizé coûte-t-elle au plus autant que Brise ?",
+      [`De 0 à ${fee} km inclus`,`Au-delà de ${fee} km seulement`,`À ${fee} km seulement`],0,
+      `Avant ${fee} km, Alizé est moins chère. À ${fee} km, les deux prix sont égaux. Le signe ≤ inclut cette égalité.`,
+      "Cherche où la droite Alizé est en dessous de l’autre, puis pense au point de croisement."),comparison:graph},
+  ];
+}
+
+assessment.division[0].diagnostics={
+  "1":["reprendre","Six est le nombre de minibus nécessaires. Dans l’égalité euclidienne, on cherche d’abord le nombre de minibus entièrement remplis."],
+  "2":["presque","L’égalité est numériquement vraie, mais le reste 15 est trop grand : on peut encore remplir un minibus de 8 places."],
+};
+assessment.pythagore[0].diagnostics={
+  "0":["reprendre","AB est un côté de l’angle droit. Repère AC, le côté opposé à l’angle droit."],
+  "2":["reprendre","BC touche l’angle droit. Le côté dont le carré doit être seul est AC."],
+};

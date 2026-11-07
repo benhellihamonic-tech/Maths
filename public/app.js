@@ -1,4 +1,5 @@
-import {writtenPractice} from "./assessment.js";
+import {explorations, correctionTone} from "./pedagogie.js";
+import {writtenPractice, tariffValues} from "./assessment.js";
 import {lessons, modes, levels, questions, games, concepts, connections, lessonGroups} from "./content.js";
 import {displayNumber} from "./curriculum.js";
 import {classProgress, lessonXP, ranks, updateEvidence, xpRoutes} from "./progression.js";
@@ -14,7 +15,7 @@ let installPrompt, selectedDomain = "";
 let notice = "", error = "", feedback = "", pending = null, help = false, filter = "", query = "";
 const clean = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
 const cap = (n,a,b) => Math.max(a,Math.min(b,n));
-const fresh = (level=0) => ({step:0,done:false,quizVersion:1,seed:Math.floor(Math.random()*0x7fffffff),level,answers:[],stars:0,help:false,game:[]});
+const fresh = (level=0) => ({step:0,done:false,quizVersion:2,seed:Math.floor(Math.random()*0x7fffffff),level,answers:[],stars:0,help:false,game:[]});
 const route = () => location.hash.slice(2).split("/");
 const go = path => { location.hash = "/" + path; };
 const get = (lesson,mode) => progress.find(p=>p.lesson===lesson && p.mode===mode);
@@ -195,7 +196,62 @@ function stepper(name,label,value,min,max) {
   return `<div class="stepper"><span>${label}</span><button data-adjust="${name}" data-delta="-1" ${value<=min?"disabled":""} aria-label="Diminuer ${label}">−</button><strong>${value}</strong><button data-adjust="${name}" data-delta="1" ${value>=max?"disabled":""} aria-label="Augmenter ${label}">+</button></div>`;
 }
 const sliders = (id,label,value,min,max) => `<label class="slider">${label} <strong id="${id}-out">${value}</strong><input id="${id}" type="range" min="${min}" max="${max}" value="${value}"></label>`;
+function tariffGraph(fee=4, distance=null) {
+  const px=x=>50+32*x, py=y=>218-6*y;
+  const series=(start,end,color,dash="")=>`<path d="M${px(0)} ${py(start)}L${px(10)} ${py(end)}" fill="none" stroke="${color}" stroke-width="3" stroke-dasharray="${dash}"/>`;
+  const [a,b]=distance===null?[]:tariffValues(distance,fee);
+  const marker=distance===null?"":`<path d="M${px(distance)} 218V${py(Math.max(a,b))}" stroke="#536b62" stroke-dasharray="3 4"/>
+    <circle cx="${px(distance)}" cy="${py(b)}" r="6" fill="#9a5121" stroke="white" stroke-width="1.5"/>
+    <circle cx="${px(distance)}" cy="${py(a)}" r="${a===b?3:5}" fill="#176453" stroke="white" stroke-width="1.5"/>`;
+  return `<figure class="tariff-graph"><svg viewBox="0 0 392 260" role="img" aria-label="Tarifs Alizé et Brise selon la distance">
+    ${Array.from({length:33},(_,y)=>`<path d="M50 ${py(y)}H370" stroke="${y%4===0?"#b9cdbf":"#e3eae2"}"/>${y%4===0?`<text x="42" y="${py(y)+4}" text-anchor="end">${y}</text>`:""}`).join("")}
+    ${Array.from({length:11},(_,x)=>`<path d="M${px(x)} 26V218" stroke="#cedbce"/><text x="${px(x)}" y="237" text-anchor="middle">${x}</text>`).join("")}
+    <path d="M50 21V218H375" fill="none" stroke="#183632" stroke-width="2"/>
+    <text x="6" y="16">Prix (€)</text><text x="369" y="254" text-anchor="end">Distance (km)</text>
+    ${series(0,30,"#176453")}${series(fee,20+fee,"#9a5121","8 4")}${marker}
+    </svg><figcaption><span class="tariff-a">━ Alizé · 3 € par km</span><span class="tariff-b">┄ Brise · ${fee} € au départ + 2 € par km</span></figcaption></figure>`;
+}
+function tariffReading(distance) {
+  const [a,b]=tariffValues(distance);
+  const difference=Math.abs(a-b);
+  const conclusion=a===b
+    ? `Les deux points se confondent. À ${distance} km, les deux compagnies demandent ${a} €.`
+    : `Le point ${a<b?"Alizé":"Brise"} est plus bas. Ce tarif est moins cher de ${difference} €.`;
+  return `${tariffGraph(4,distance)}<p class="hint" role="status"><strong>À ${distance} km</strong> · Alizé : ${a} € · Brise : ${b} €.<br>${conclusion}</p>`;
+}
+function tariffLesson() {
+  const distance=cap(active.game[0]??2,0,10);
+  return `<article class="paper"><p class="eyebrow">01 · COMPARER DEUX TARIFS</p>
+    <h2>Quel bateau coûte le moins cher ?</h2>
+    <p>Alizé demande <strong>3 € par kilomètre</strong>. Brise demande <strong>4 € au départ, puis 2 € par kilomètre</strong>. On cherche à quel moment il devient plus intéressant de choisir Brise.</p>
+    <p><strong>Avant de bouger le curseur</strong>, prédis le tarif le moins cher pour un trajet de 2 km, puis pour un trajet de 7 km.</p>
+    <div class="controls">${sliders("a","Distance du trajet (km)",distance,0,10)}</div>
+    <div id="model">${tariffReading(distance)}</div>
+    <p>Le trait vertical part de la distance choisie. Là où il rencontre chaque droite, lis le prix sur l’axe vertical. Essaie de faire coïncider les deux points.</p>
+    <details><summary>Vérifier le point de croisement</summary><p>Les droites se coupent en <strong>(4 ; 12)</strong>. On lit <strong>4 km</strong> en abscisse et <strong>12 €</strong> en ordonnée. À 4 km, les deux prix sont égaux.</p></details>
+    <p class="eyebrow tariff-step">02 · RELIER LE GRAPHIQUE AU CALCUL</p>
+    <ul><li><strong>Équation.</strong> On cherche quand les deux prix sont égaux : 3x = 2x + 4. En retranchant 2x, on obtient x = 4.</li>
+    <li><strong>Comparaison.</strong> Alizé coûte moins cher quand sa droite est en dessous de celle de Brise, donc pour 0 ≤ x &lt; 4. Au-delà de 4 km, Brise coûte moins cher.</li>
+    <li><strong>« Au plus autant ».</strong> On inclut le point de croisement. Sur le graphique, 3x ≤ 2x + 4 pour 0 ≤ x ≤ 4.</li></ul>
+    <button class="primary" data-action="finish-lesson" ${busy?"disabled":""}>${active.done?"✓ Leçon terminée":"Terminer la leçon"} ↗</button>
+    <a class="text-link next-link" href="#/atelier/graphiques3/quiz">Aller au quiz →</a></article>`;
+}
+const tariffMissions=[
+  ["Repère la distance pour laquelle les deux compagnies coûtent le même prix.",x=>x===4],
+  ["Choisis un trajet de plus de 0 km où Alizé est strictement moins chère.",x=>x>0&&x<4],
+  ["Choisis un trajet où Brise est strictement moins chère.",x=>x>4],
+];
+function explorationLesson(key, lesson) {
+  return `<article class="paper"><p class="eyebrow">01 · PRÉDIS, PUIS ESSAIE</p><h2>${lesson.title}</h2><p>${lesson.question}</p>
+    <div class="controls">${lesson.controls.map(([id,label,start,min,max],i)=>sliders(id,label,cap(active.game[i]??start,min,max),min,max)).join("")}</div>
+    <div id="model"></div>
+    <div class="course-recap"><p class="eyebrow">02 · À RETENIR</p><p>${lesson.recap}</p></div>
+    <button class="primary" data-action="finish-lesson" ${busy?"disabled":""}>${active.done?"✓ Leçon terminée":"Terminer la leçon"} ↗</button>
+    <a class="text-link next-link" href="#/atelier/${key}/quiz">Aller au quiz →</a></article>`;
+}
 function lessonView(key) {
+  if(key==="graphiques3") return tariffLesson();
+  if(Object.hasOwn(explorations,key)) return explorationLesson(key,explorations[key]);
   const concept=concepts[key];
   if(concept) return `<article class="paper"><p class="eyebrow">01 · MANIPULER</p><h2>${concept.title}</h2><p>${concept.intro}</p>
     <div class="controls">${sliders("a",concept.control,active.game[0]??concept.initial,concept.min,concept.max)}</div>
@@ -215,6 +271,22 @@ function lessonView(key) {
     <a class="text-link next-link" href="#/atelier/${key}/quiz">Aller au quiz →</a></article>`;
 }
 function model(key) {
+  if(key==="graphiques3"){
+    const distance=Number(document.querySelector("#a").value);
+    document.querySelector("#a-out").textContent=distance;
+    document.querySelector("#model").innerHTML=tariffReading(distance);
+    return;
+  }
+  if(Object.hasOwn(explorations,key)){
+    const lesson=explorations[key];
+    const values=lesson.controls.map(([id])=>{
+      const value=Number(document.querySelector("#"+id).value);
+      document.querySelector("#"+id+"-out").textContent=value;
+      return value;
+    });
+    document.querySelector("#model").innerHTML=lesson.draw(...values);
+    return;
+  }
   const concept=concepts[key];
   if(concept){
     const n=Number(document.querySelector("#a").value);
@@ -223,8 +295,6 @@ function model(key) {
       ? `<div class="fraction-bar" aria-label="${n} parts sur 8">${Array.from({length:8},(_,i)=>`<span class="${i<n?"taken":""}">${i+1}</span>`).join("")}</div>`
       : key==="relatifs"
       ? `<div class="number-line">${[-9,-6,-3,0,3,6,9,12].map(t=>`<span>${t}</span>`).join("")}<b style="left:${(concept.model(n)+9)/21*100}%">●</b></div>`
-      : key==="pythagore"
-      ? `<svg class="triangle" viewBox="0 0 220 130" aria-label="Triangle rectangle"><path d="M35 15V105H155Z" fill="#d5eddf" stroke="#245e4d" stroke-width="3"/><path d="M35 89h16v16" fill="none" stroke="#245e4d"/><g fill="#183632"><text x="2" y="67">${3*n} m</text><text x="77" y="124">${4*n} m</text><text x="104" y="56">${5*n} m</text></g></svg>`
       : `<div class="game-scene live-result"><strong>${displayNumber(concept.model(n))}</strong> ${concept.label}</div>`;
     document.querySelector("#formula").textContent=concept.equation(n);
     return;
@@ -243,7 +313,9 @@ function model(key) {
 function production(key) {
   const practice=writtenPractice[key];
   return (practice?`<section class="paper relation"><p class="eyebrow">SUR TON CAHIER OU AVEC UN LOGICIEL</p>
-    <h2>À construire ou à rédiger</h2><p>${practice[0]}</p><details><summary>Comparer mon travail au corrigé</summary>
+    <h2>À construire ou à rédiger</h2><p>${practice[0]}</p>
+    <label class="practice-draft">Brouillon facultatif <textarea rows="3" placeholder="Écris ta démarche ou prépare-la sur ton cahier."></textarea></label>
+    <p class="footnote">Compare ta démarche au corrigé. Ce brouillon n’est pas noté ni enregistré.</p><details><summary>Comparer mon travail au corrigé</summary>
     <p>${practice[1]}</p><p><strong>À vérifier dans ta production.</strong> ${practice[2]}</p></details></section>`:"")
     + (key==="simulation3"?`<section class="paper relation"><p class="eyebrow">EXPÉRIENCE ALÉATOIRE</p><h2>Comparer des séries de lancers</h2>
       <p>Choisis un nombre de lancers d’une pièce équilibrée. Compare la fréquence de pile avec 50 % et relance plusieurs fois.</p>
@@ -318,27 +390,59 @@ function validateAnswer(q, values) {
   const value=Number(raw);
   return {value,correct:Math.abs(value-q.answer)<1e-9};
 }
+function responseLabel(q,value) {
+  if(q.kind==="choice") return q.options[Number(value)]??"";
+  if(q.kind==="order") return value.map(i=>q.options[i]).join(" → ");
+  if(q.kind==="bars") return value.map((n,i)=>q.labels[i]+" : "+n).join(" · ");
+  if(q.kind==="point") return "("+String(value).replace(","," ; ")+")";
+  return typeof value==="number"?displayNumber(value):value;
+}
+function quizVisual(q) {
+  return (q.values?quizChart(q.values):"")+(q.graph?quizGraph(q.graph):"")+(q.comparison?tariffGraph(q.comparison.fee):"");
+}
+function correctionBlock(q,answer) {
+  const [tone,title,detail]=correctionTone(q,answer);
+  return `<section class="correction ${tone}" role="status"><h2>${title}</h2>
+    <p><strong>Ta réponse.</strong> ${clean(responseLabel(q,answer.value))}</p>
+    ${detail?`<p>${clean(detail)}</p>`:""}
+    <p><strong>La méthode.</strong> ${clean(answer.explain||q.explain)}</p></section>`;
+}
 function quizView(key) {
+  const series=questions(key,active.seed,active.level,active.quizVersion);
   if(feedback) return `<article class="paper"><p class="eyebrow">QUESTION ${active.step} / 5 · CORRECTION</p>
-    <h2>${active.answers.at(-1)?.correct?"Réponse juste":"On regarde ensemble ?"}</h2>
-    <p class="hint" role="status">${clean(feedback)}</p><button class="primary" data-action="continue-quiz">${active.done?"Voir mon bilan":"Question suivante"} →</button></article>`;
+    <p>${clean(series[active.step-1].prompt)}</p>${quizVisual(series[active.step-1])}
+    ${correctionBlock(series[active.step-1],active.answers.at(-1))}
+    <button class="primary" data-action="continue-quiz">${active.done?"Voir mon bilan":"Question suivante"} →</button></article>`;
   const levelButtons=`<div class="pills">${levels.map((l,i)=>`<button data-level="${i}" aria-pressed="${active.level===i}" ${active.answers.length||busy?"disabled":""}>${l}</button>`).join("")}</div>`;
   if(active.done){
     const score=active.answers.filter(a=>a.correct).length;
+    const review=active.answers.map((answer,i)=>`<details><summary>Question ${i+1} · ${answer.correct?"Réussie":"À revoir"}</summary>
+      <p>${clean(series[i].prompt)}</p>${correctionBlock(series[i],answer)}</details>`).join("");
     return `<article class="paper result"><p class="eyebrow">✦ &nbsp; BILAN DU QUIZ</p><h2>${score}/5 réponses justes</h2><p>${active.answers.filter(a=>a.correct&&!a.help).length} réussies en autonomie · ${evidence[key]?.perfect?.length||0}/2 séries parfaites pour maîtriser la notion.</p>
-      <button class="primary" data-action="restart">Nouvelle série ↗</button><a class="text-link next-link" href="#/atelier/${key}/jeu">Passer au jeu →</a></article>`;
+      <div class="quiz-review">${review}</div>
+      <button class="primary" data-action="restart">Nouvelle série ↗</button><a class="text-link next-link" href="#/atelier/${key}/lecon">Revoir la leçon →</a><a class="text-link next-link" href="#/atelier/${key}/jeu">Passer au jeu →</a></article>`;
   }
-  const q=questions(key,active.seed,active.level,active.quizVersion)[active.step];
+  const q=series[active.step];
   return `<article class="paper"><p class="eyebrow">QUESTION ${active.step+1} / 5</p>
     <div class="segments" aria-label="Question ${active.step+1} sur 5">${Array.from({length:5},(_,i)=>`<span class="${i<=active.step?"filled":""}"></span>`).join("")}</div>
-    ${levelButtons}<p class="quiz-goal">✦ Termine les cinq questions pour gagner des XP. Pour valider une série parfaite, choisis En autonomie ou Défi et réponds juste sans indice.</p><h2>${clean(q.prompt)}</h2>${q.values?quizChart(q.values):""}${q.graph?quizGraph(q.graph):""}<form id="answer" class="answer">${answerFields(q)}
+    ${levelButtons}<p class="quiz-goal">✦ Termine les cinq questions pour gagner des XP. Pour valider une série parfaite, choisis En autonomie ou Défi et réponds juste sans indice.</p><h2>${clean(q.prompt)}</h2>${quizVisual(q)}<form id="answer" class="answer">${answerFields(q)}
     <button class="primary" ${busy?"disabled":""}>Vérifier ↗</button></form>
-    <button class="quiet" data-action="help">Un indice</button>${help||active.level===0?`<p class="hint">${clean(q.hint||lessons[key].help)}</p>`:""}
+    <button class="quiet" data-action="help" aria-controls="quiz-help" aria-expanded="${help||active.level===0}">Indice et rappel de cours</button>
+    <div id="quiz-help" class="hint" ${help||active.level===0?"":"hidden"}><p><strong>Indice.</strong> ${clean(q.hint||lessons[key].help)}</p>
+      <p><strong>À retenir.</strong> ${clean(explorations[key]?.recap||lessons[key].summary)}</p></div>
     </article>`;
 }
 function gameView(key) {
   const isDivision=key==="division";
   if(active.done) return `<article class="paper result"><p class="eyebrow">MISSION ACCOMPLIE</p><h2>${"★ ".repeat(active.stars||0)||"Trois étapes réussies"}</h2><p>Les trois étapes ont été validées. ${free?"Tu peux rejouer.":"Ton résultat est enregistré."}</p><button class="primary" data-action="restart">Rejouer ↗</button></article>`;
+  if(key==="graphiques3"){
+    const distance=cap(active.game[0]??2,0,10);
+    return `<article class="paper"><p class="eyebrow">MISSION ${active.step+1} / 3</p><h2>À toi de choisir le trajet</h2>
+      <p>${tariffMissions[active.step][0]}</p>${tariffGraph(4,distance)}
+      <div class="controls">${stepper("a","Distance en km",distance,0,10)}</div>
+      <button class="primary" data-action="game-test" ${busy?"disabled":""}>Valider la distance ↗</button>
+      ${feedback?`<p class="hint" role="status">${clean(feedback)}</p>`:""}</article>`;
+  }
   const concept=concepts[key];
   if(concept){
     const value=active.game[0]??concept.min;
@@ -518,6 +622,10 @@ root.addEventListener("click",async e=>{
   if(!active||!lessons[key]||!modes[mode]) return;
   if(d.level!==undefined){active=fresh(Number(d.level));render();return;}
   if(d.adjust){
+    if(key==="graphiques3"){
+      active={...active,game:[cap((active.game[0]??2)+Number(d.delta),0,10)]};
+      feedback="";render();return;
+    }
     const concept=concepts[key];
     if(concept){
       active={...active,game:[cap((active.game[0]??concept.min)+Number(d.delta),concept.min,concept.max)]};
@@ -529,11 +637,25 @@ root.addEventListener("click",async e=>{
     game[i]=cap(game[i]+Number(d.delta),isDivision||i===0?0:-8,isDivision?g.max:8);
     active={...active,game};feedback="";render();return;
   }
-  if(d.action==="help"){help=true;render();return;}
+  if(d.action==="help"){
+    help=true;
+    const panel=document.querySelector("#quiz-help");
+    if(panel){panel.hidden=false;button.setAttribute("aria-expanded","true");}
+    return;
+  }
   if(d.action==="continue-quiz"){feedback="";if(!active.done)notice="";render();return;}
   if(d.action==="restart") return commit({key,mode,state:{...fresh(active.level),bestStars:active.bestStars||active.stars||0},after:()=>{feedback="";help=false;}});
   if(d.action==="finish-lesson") return commit({key,mode,state:{...active,done:true,step:1}});
   if(d.action==="game-test"){
+    if(key==="graphiques3"){
+      const distance=cap(active.game[0]??2,0,10);
+      if(!tariffMissions[active.step][1](distance)){
+        feedback="À cette distance, compare les deux points à la verticale. Essaie une autre distance.";render();return;
+      }
+      const stars=active.stars+1;
+      return commit({key,mode,state:{...active,step:active.step+1,done:active.step===2,stars,bestStars:Math.max(active.bestStars||0,stars),game:[]},
+        after:()=>{feedback="Bonne lecture du graphique.";}});
+    }
     const concept=concepts[key];
     if(concept){
       if(concept.model(active.game[0]??concept.min)!==concept.model(concept.targets[active.step])){
