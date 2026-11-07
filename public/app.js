@@ -22,6 +22,28 @@ const get = (lesson,mode) => progress.find(p=>p.lesson===lesson && p.mode===mode
 const credit = '<footer class="site-credit">Réalisé par <strong>Marie HAMONIC</strong> · collège Jean Moulin</footer>';
 const totalStars = () => progress.filter(p=>p.mode==="jeu").reduce((a,p)=>a+(p.bestStars||p.stars||0),0);
 
+const themeKey = "archipel-theme";
+const systemTheme = globalThis.matchMedia?.("(prefers-color-scheme: dark)");
+let themePreference;
+try {
+  const saved=globalThis.localStorage?.getItem(themeKey);
+  if(saved==="light"||saved==="dark") themePreference=saved;
+} catch { /* La préférence reste disponible pendant la visite. */ }
+const currentTheme=()=>themePreference||(systemTheme?.matches?"dark":"light");
+function applyTheme() {
+  const theme=currentTheme();
+  document.documentElement.dataset.theme=theme;
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content",theme==="dark"?"#081c33":"#0b254c");
+  document.querySelectorAll('[data-action="theme"]').forEach(button=>button.setAttribute("aria-pressed",String(theme==="dark")));
+}
+applyTheme();
+systemTheme?.addEventListener?.("change",()=>{if(!themePreference) applyTheme();});
+
+function themeButton() {
+  return `<button type="button" class="theme-toggle" data-action="theme" aria-label="Mode sombre" aria-pressed="${currentTheme()==="dark"}">
+    <span class="theme-symbol" aria-hidden="true"></span><span class="theme-label">Mode sombre</span></button>`;
+}
+
 async function api(path, body) {
   const response = await fetch("/api/"+path, {
     method:body===undefined?"GET":"POST", cache:"no-store",
@@ -51,7 +73,7 @@ function login() {
     <div class="brand">${brand()}</div><div class="login-title"><p class="eyebrow">✦ &nbsp; EXPÉDITION MATHÉMATIQUE</p>
     <h1>Les maths,<br><em>ça s’explore.</em></h1><p>Des notions à manipuler, des missions à relever et ton propre chemin de la 6e à la 3e.</p></div>
     <div class="coordinates">48° N &nbsp; / &nbsp; 02° O <span>ATLAS · ÉDITION 01</span></div></section>
-    <section class="login-form"><div><p class="eyebrow">● &nbsp; LE POINT DE DÉPART</p><h2>Bienvenue à bord.</h2>
+    <section class="login-form"><div><div class="login-theme">${themeButton()}</div><p class="eyebrow">● &nbsp; LE POINT DE DÉPART</p><h2>Bienvenue à bord.</h2>
     <p>Explore librement ou connecte-toi pour retrouver ta progression.</p>
     <button class="primary" data-action="free">Parcours libre <span>↗</span></button>
     ${standalone?'<p class="footnote">Version autonome · pour utiliser un compte, ouvre Lancer-Archipel.command dans le Finder.</p>':`<form id="login"><label>Identifiant<input name="username" required autocomplete="username"></label>
@@ -69,7 +91,7 @@ function shell(body,tab) {
     <nav aria-label="Navigation principale">${links}</nav><div class="side-end"><div class="avatar">${clean(user.name[0])}</div><div><b>${clean(user.name)}</b><small>${clean(user.grade || (user.role==="teacher"?"Enseignante":"Classe à choisir"))}</small></div>
     <button data-action="logout" title="Déconnexion" aria-label="Déconnexion">↪</button></div></aside>
     <main id="content" class="content"><header class="top"><span>✦ &nbsp; ARCHIPEL <i>/</i> ${clean(nav[tab]?.[1] || "Espace prof")}</span>
-    <span class="top-profile">${free?'<small>Parcours libre · session en cours</small>':""}${rank?`<a class="xp-chip" href="#/profil" title="Voir mon rang">${rank.xp} XP</a>`:""}<strong>★ ${totalStars()}</strong><button data-action="logout" aria-label="Déconnexion">↪</button></span></header>
+    <span class="top-profile">${themeButton()}${free?'<small>Parcours libre · session en cours</small>':""}${rank?`<a class="xp-chip" href="#/profil" title="Voir mon rang">${rank.xp} XP</a>`:""}<strong>★ ${totalStars()}</strong><button data-action="logout" aria-label="Déconnexion">↪</button></span></header>
     ${status()}${installLink()}${body}${credit}</main></div>`;
 }
 function card(key, lesson) {
@@ -200,15 +222,15 @@ function tariffGraph(fee=4, distance=null) {
   const px=x=>50+32*x, py=y=>218-6*y;
   const series=(start,end,color,dash="")=>`<path d="M${px(0)} ${py(start)}L${px(10)} ${py(end)}" fill="none" stroke="${color}" stroke-width="3" stroke-dasharray="${dash}"/>`;
   const [a,b]=distance===null?[]:tariffValues(distance,fee);
-  const marker=distance===null?"":`<path d="M${px(distance)} 218V${py(Math.max(a,b))}" stroke="#45627c" stroke-dasharray="3 4"/>
-    <circle cx="${px(distance)}" cy="${py(b)}" r="6" fill="#9a5121" stroke="white" stroke-width="1.5"/>
-    <circle cx="${px(distance)}" cy="${py(a)}" r="${a===b?3:5}" fill="#11739c" stroke="white" stroke-width="1.5"/>`;
+  const marker=distance===null?"":`<path d="M${px(distance)} 218V${py(Math.max(a,b))}" stroke="var(--muted)" stroke-dasharray="3 4"/>
+    <circle cx="${px(distance)}" cy="${py(b)}" r="6" fill="var(--chart-sand)" stroke="white" stroke-width="1.5"/>
+    <circle cx="${px(distance)}" cy="${py(a)}" r="${a===b?3:5}" fill="var(--chart-blue)" stroke="white" stroke-width="1.5"/>`;
   return `<figure class="tariff-graph"><svg viewBox="0 0 392 260" role="img" aria-label="Tarifs Alizé et Brise selon la distance">
-    ${Array.from({length:33},(_,y)=>`<path d="M50 ${py(y)}H370" stroke="${y%4===0?"#a9c7de":"#e3eef8"}"/>${y%4===0?`<text x="42" y="${py(y)+4}" text-anchor="end">${y}</text>`:""}`).join("")}
-    ${Array.from({length:11},(_,x)=>`<path d="M${px(x)} 26V218" stroke="#ccdeee"/><text x="${px(x)}" y="237" text-anchor="middle">${x}</text>`).join("")}
-    <path d="M50 21V218H375" fill="none" stroke="#142b48" stroke-width="2"/>
+    ${Array.from({length:33},(_,y)=>`<path d="M50 ${py(y)}H370" stroke="${y%4===0?"var(--chart-grid)":"var(--chart-minor)"}"/>${y%4===0?`<text x="42" y="${py(y)+4}" text-anchor="end">${y}</text>`:""}`).join("")}
+    ${Array.from({length:11},(_,x)=>`<path d="M${px(x)} 26V218" stroke="var(--chart-grid)"/><text x="${px(x)}" y="237" text-anchor="middle">${x}</text>`).join("")}
+    <path d="M50 21V218H375" fill="none" stroke="var(--ink)" stroke-width="2"/>
     <text x="6" y="16">Prix (€)</text><text x="369" y="254" text-anchor="end">Distance (km)</text>
-    ${series(0,30,"#11739c")}${series(fee,20+fee,"#9a5121","8 4")}${marker}
+    ${series(0,30,"var(--chart-blue)")}${series(fee,20+fee,"var(--chart-sand)","8 4")}${marker}
     </svg><figcaption><span class="tariff-a">━ Alizé · 3 € par km</span><span class="tariff-b">┄ Brise · ${fee} € au départ + 2 € par km</span></figcaption></figure>`;
 }
 function tariffReading(distance) {
@@ -369,10 +391,10 @@ function quizGraph(graph) {
   const px=x=>34+x*36, py=y=>188-y*26;
   const plot=(points,color,dash="")=>`<polyline points="${points.map(([x,y])=>px(x)+","+py(y)).join(" ")}" fill="none" stroke="${color}" stroke-width="3" stroke-dasharray="${dash}"/>`;
   return `<svg class="quiz-graph" viewBox="0 0 204 215" role="img" aria-label="Repère gradué, ${graph.second?"deux droites":"une droite"}">
-    ${Array.from({length:7},(_,y)=>`<path d="M34 ${py(y)}H178" stroke="#ccdeee"/><text x="18" y="${py(y)+4}">${y}</text>`).join("")}
-    ${Array.from({length:5},(_,x)=>`<path d="M${px(x)} 32V188" stroke="#ccdeee"/><text x="${px(x)-4}" y="207">${x}</text>`).join("")}
-    <path d="M34 28V188H188" fill="none" stroke="#142b48" stroke-width="2"/>
-    ${plot(graph.points,"#126e9e")}${graph.second?plot(graph.second,"#854919","5 3"):""}</svg>`;
+    ${Array.from({length:7},(_,y)=>`<path d="M34 ${py(y)}H178" stroke="var(--chart-grid)"/><text x="18" y="${py(y)+4}">${y}</text>`).join("")}
+    ${Array.from({length:5},(_,x)=>`<path d="M${px(x)} 32V188" stroke="var(--chart-grid)"/><text x="${px(x)-4}" y="207">${x}</text>`).join("")}
+    <path d="M34 28V188H188" fill="none" stroke="var(--ink)" stroke-width="2"/>
+    ${plot(graph.points,"var(--chart-reef)")}${graph.second?plot(graph.second,"var(--chart-sand)","5 3"):""}</svg>`;
 }
 function answerFields(q) {
   if(q.kind==="bars") return `<fieldset class="quiz-order"><legend>Règle les hauteurs des bâtons</legend>
@@ -616,6 +638,12 @@ root.addEventListener("click",async e=>{
   if(!button) return;
   const d=button.dataset;
   const [,key,mode]=route();
+  if(d.action==="theme"){
+    themePreference=currentTheme()==="dark"?"light":"dark";
+    try { globalThis.localStorage?.setItem(themeKey,themePreference); } catch { /* Préférence de la visite. */ }
+    applyTheme();
+    return;
+  }
   if(d.simulate){
     const trials=Number(d.simulate);
     let heads=0;

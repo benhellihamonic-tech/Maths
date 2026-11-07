@@ -37,14 +37,14 @@ function affine(a,b,x) {
   const y=a*x+b;
   const slope=b+a;
   return `<figure class="lesson-figure"><svg viewBox="0 0 326 275" role="img" aria-label="Droite de la fonction et point (${x} ; ${y})">
-  ${Array.from({length:9},(_,i)=>i-4).map(n=>`<path d="M${px(n)} 12V260" stroke="#ccdeee"/><text x="${px(n)}" y="271" text-anchor="middle">${n}</text>`).join("")}
-  ${Array.from({length:14},(_,i)=>-12+2*i).map(n=>`<path d="M45 ${py(n)}H301" stroke="#ccdeee"/><text x="39" y="${py(n)+4}" text-anchor="end">${n}</text>`).join("")}
-  <path d="M45 ${py(0)}H306M${px(0)} 12V260" stroke="#142b48" stroke-width="2"/>
-  <path d="M${px(-4)} ${py(-4*a+b)}L${px(4)} ${py(4*a+b)}" stroke="#11739c" stroke-width="3"/>
-  <path d="M${px(x)} ${py(0)}V${py(y)}H${px(0)}" fill="none" stroke="#9a5121" stroke-width="2" stroke-dasharray="4 3"/>
-  <circle cx="${px(0)}" cy="${py(b)}" r="4" fill="#11739c"/>
-  <circle cx="${px(x)}" cy="${py(y)}" r="5" fill="#9a5121"/>
-  </svg><figcaption>Le point orange a pour abscisse <strong>${x}</strong> et pour ordonnée <strong>${y}</strong>.</figcaption></figure>
+  ${Array.from({length:9},(_,i)=>i-4).map(n=>`<path d="M${px(n)} 12V260" stroke="var(--chart-grid)"/><text x="${px(n)}" y="271" text-anchor="middle">${n}</text>`).join("")}
+  ${Array.from({length:14},(_,i)=>-12+2*i).map(n=>`<path d="M45 ${py(n)}H301" stroke="var(--chart-grid)"/><text x="39" y="${py(n)+4}" text-anchor="end">${n}</text>`).join("")}
+  <path d="M45 ${py(0)}H306M${px(0)} 12V260" stroke="var(--ink)" stroke-width="2"/>
+  <path d="M${px(-4)} ${py(-4*a+b)}L${px(4)} ${py(4*a+b)}" stroke="var(--chart-blue)" stroke-width="3"/>
+  <path d="M${px(x)} ${py(0)}V${py(y)}H${px(0)}" fill="none" stroke="var(--chart-sand)" stroke-width="2" stroke-dasharray="4 3"/>
+  <circle cx="${px(0)}" cy="${py(b)}" r="4" fill="var(--chart-blue)"/>
+  <circle cx="${px(x)}" cy="${py(y)}" r="5" fill="var(--chart-sand)"/>
+  </svg><figcaption>Le point ocre a pour abscisse <strong>${x}</strong> et pour ordonnée <strong>${y}</strong>.</figcaption></figure>
   <p class="formula">f(${x}) = ${a} × (${x}) + ${b} = ${y}</p>
   <p>Sur l’axe vertical, f(0) = ${b}. En avançant de 1, on arrive à f(1) = ${slope}, soit une variation de ${a}.</p>`;
 }
@@ -54,7 +54,7 @@ function decimals(n) {
     <path d="M30 48H430" stroke="#155b88" stroke-width="2"/>
     ${Array.from({length:101},(_,i)=>`<path d="M${30+i*4} 48v${i%10===0?12:5}" stroke="#527fa2"/>`).join("")}
     ${Array.from({length:11},(_,i)=>`<text x="${30+i*40}" y="76" text-anchor="middle">${displayNumber(i/10)}</text>`).join("")}
-    <circle cx="${cx}" cy="48" r="5" fill="#8d461f"/><text x="${cx}" y="35" text-anchor="middle" font-weight="bold">${displayNumber(n/100)}</text>
+    <circle cx="${cx}" cy="48" r="5" fill="var(--chart-sand)"/><text x="${cx}" y="35" text-anchor="middle" font-weight="bold">${displayNumber(n/100)}</text>
     </svg><figcaption>Entre deux dixièmes, il y a dix intervalles d’un centième.</figcaption></figure>
     <p class="formula">${n}/100 = ${displayNumber(n/100)}</p>
     <p>${n<100?`${Math.floor(n/10)} dixième(s) et ${n%10} centième(s).`:"Cent centièmes forment une unité."}</p>`;
