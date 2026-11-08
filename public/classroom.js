@@ -169,6 +169,19 @@ const races={
  "4e":"tables scale10 priority2 signedAdd signedMul fracProduct fracAdd stats probability power10 areaVolumeConversion rightTriangle substitution percent solids equation",
  "3e":"signedMul fracAdd scientific percent discount coefficients roots pythagoras thales substitution images reduce factor equation probability stats",
 };
+// Une lecture graphique dans chaque nouvelle série, sans modifier les séries déjà enregistrées.
+const lineReplacedSkills={cm2:"complet10","6e":"divSmall","5e":"trou","4e":"power10","3e":"discount"};
+function canNumberLine(level,n,m,i){
+ const scale=level==="cm2"?1:10;
+ const step=(level==="cm2"?[2,5,10]:[1,2,5,10])[i%(level==="cm2"?3:4)];
+ const start=level==="cm2"?n*step:level==="6e"?n*10+m:-n*step;
+ const point=[2,5,6,7][m%4];
+ const labels=[[1,fm((start+step)/scale)],[3,fm((start+3*step)/scale)]];
+ const answer=(start+point*step)/scale;
+ return {prompt:"Lis l’abscisse du point A.",answer,skill:"Lire une droite graduée",
+  figure:{kind:"numberLine",labels,point},
+  explain:`Il y a deux intervalles entre les graduations ${labels[0][1]} et ${labels[1][1]}. Un intervalle vaut ${fm(step/scale)}. Le point A est à ${point-1} intervalle(s) à droite de ${labels[0][1]}, donc son abscisse vaut ${fm(answer)}.`};
+}
 const courseNames={cm2:"Fin de CM2","6e":"Fin de 6e","5e":"Fin de 5e","4e":"Fin de 4e","3e":"Fin de 3e"};
 export const officialCAN="https://codimd.apps.education.fr/s/7G91CuKJR";
 export const officialCANArchives="https://codimd.apps.education.fr/s/QNNYn5gTJ";
@@ -495,6 +508,26 @@ export function chapterAnswerCorrect(item,value){
  return true;
 }
 
+function trainingFigure(key,n,m,i){
+ switch(key){
+  case "areaPerimeter":
+   return {kind:"rectangle",length:n,width:m,prompt:i%2?"Calcule le périmètre du rectangle en cm.":"Calcule l’aire du rectangle en cm²."};
+  case "angle":
+   return {kind:"angles",left:4*n,right:5*m,prompt:"Calcule l’angle marqué ? en degrés."};
+  case "solids":
+   return i%2?{kind:"prism",baseArea:n,height:m,prompt:"Calcule le volume du prisme en cm³."}:
+    {kind:"triangleArea",base:2*n,height:m,prompt:"Calcule l’aire du triangle en cm²."};
+  case "rightTriangle":
+   return {kind:"triangleSides",lengths:[3*(1+n%4),4*(1+n%4),5*(1+n%4)+i%2],prompt:"Ce triangle est-il rectangle ?"};
+  case "pythagoras":
+   return {kind:"triangleSides",lengths:[3*(1+n%4),4*(1+n%4),null],rightAngle:true,prompt:"Calcule la longueur marquée ? en cm."};
+  case "thales":
+   return {kind:"thales",am:m,ab:2*m,ac:2*n,prompt:"Calcule la longueur AN."};
+  default:
+   return null;
+ }
+}
+
 export function trainingSet(type,grade,id,seed,version=0){
  const skills=type==="can"&&classRaces(grade).some(race=>race.level===id)?races[id]:
   type==="belt"?classBelts[grade]?.[Number(id)]:
@@ -505,11 +538,19 @@ export function trainingSet(type,grade,id,seed,version=0){
  const seen=new Set();
  return Array.from({length:count},(_,i)=>{
   const key=keys[i%keys.length];
+  const isNumberLine=type==="can"&&version>=2&&key===lineReplacedSkills[id];
   const skill=skillBank[key];
   for(let attempt=0;attempt<88;attempt++){
    const n=2+((Math.imul(seed^(i*731+17),2654435761)>>>0)+attempt)%11;
    const m=2+((Math.imul(seed^(i*131+39),2246822519)>>>0)+Math.floor(attempt/11))%8;
    const variant=i+Math.floor(i/keys.length)+(seed%12)+attempt;
+   if(isNumberLine){
+    const question=canNumberLine(id,n,m,variant);
+    const signature=JSON.stringify(question.figure);
+    if(seen.has(signature)) continue;
+    seen.add(signature);
+    return question;
+   }
    if(version>=1&&key==="fracCompare"){
     const a=n%5+1, b=6, denominator=b*m, numerator=a*m;
     const answer=["<","=",">"][variant%3];
@@ -526,7 +567,8 @@ export function trainingSet(type,grade,id,seed,version=0){
    seen.add(prompt);
    const offset=options?((Math.imul(seed+i+1,1103515245)>>>0)%options.length):0;
    const choices=options&&options.slice(offset).concat(options.slice(0,offset));
-   return {prompt,answer,explain,options:choices,irreducible,skill:skill.label};
+   const figure=trainingFigure(key,n,m,variant);
+   return {prompt:figure?.prompt??prompt,answer,explain,options:choices,irreducible,skill:skill.label,...(figure?{figure}:{})};
   }
   throw new Error(`Pas assez de variantes pour ${key}`);
  });

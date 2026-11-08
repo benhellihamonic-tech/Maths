@@ -14,7 +14,7 @@ def svg_url(filename):
 
 def main():
     content = "\n".join((PUBLIC / filename).read_text(encoding="utf-8")
-                        for filename in ("curriculum.js", "assessment.js", "content.js", "progression.js", "pedagogie.js", "classroom.js",
+                        for filename in ("curriculum.js", "assessment.js", "content.js", "progression.js", "pedagogie.js", "classroom.js", "training-figures.js",
                                          "chapter-tools.js", "chapters4.js", "chapters5.js", "chapters-bilans.js",
                                          "chapters3-algebre.js", "chapters.js"))
     syllabus=(PUBLIC / "curriculum.js").read_text(encoding="utf-8")

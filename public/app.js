@@ -1,3 +1,4 @@
+import {trainingVisual} from "./training-figures.js";
 import {chapters} from "./chapters.js";
 import {beltColors,classBelts,classAutomatisms,weeklyAutomatisms,weeklyProblems,classRaces,officialCAN,officialCANArchives,trainingSet,trainingCorrect,chapterAnswerCorrect} from "./classroom.js";
 import {explorations, correctionTone} from "./pedagogie.js";
@@ -535,13 +536,13 @@ function trainingPage(type,id) {
       <div class="quiz-review">${training.questions.map((q,i)=>{
         const value=training.answers[i]??"", ok=trainingCorrect(q,value);
         return `<details><summary>${i+1}. ${clean(q.skill)} · ${ok?"Réussie":value?"À revoir":"Non répondue"}</summary>
-          <p>${clean(q.prompt)}</p>${comparisonContext(q)}<p><strong>Ta réponse.</strong> ${clean(value||"—")} · <strong>Réponse attendue.</strong> ${typeof q.answer==="number"?displayNumber(q.answer):clean(q.answer)}</p>
+          <p>${clean(q.prompt)}</p>${trainingVisual(q.figure)}${comparisonContext(q)}<p><strong>Ta réponse.</strong> ${clean(value||"—")} · <strong>Réponse attendue.</strong> ${typeof q.answer==="number"?displayNumber(q.answer):clean(q.answer)}</p>
           <p>${clean(q.explain)}</p></details>`;
       }).join("")}</div></section>`;
   }
   const q=training.questions[training.index], saved=training.answers[training.index]??"";
   return head+`<section class="paper"><p class="eyebrow">QUESTION ${training.index+1} / ${training.questions.length}
-    ${training.deadline?' · <output id="training-clock" aria-label="Temps restant"></output>':""}</p><h2>${clean(q.prompt)}</h2>
+    ${training.deadline?' · <output id="training-clock" aria-label="Temps restant"></output>':""}</p><h2>${clean(q.prompt)}</h2>${trainingVisual(q.figure)}
     <form id="training-answer" class="answer">${q.compare?comparisonFields("answer",q.compare,saved,true):q.options
       ?touchChoices("answer",q.options.map(option=>[option,option]),{value:saved,immediate:true})
       :touchNumber("answer",{value:saved,open:true})}
@@ -1244,10 +1245,11 @@ root.addEventListener("click",async e=>{
     if(tab!=="defis") return;
     if(busy||activityPending) return;
     const seed=Math.floor(Math.random()*0x7fffffff), ref=[selectedGrade,type,id].join("/");
-    const series=trainingSet(type,selectedGrade,id,seed,1);
+    const version=type==="can"?2:1;
+    const series=trainingSet(type,selectedGrade,id,seed,version);
     if(!series.length) return;
     renderTrainingIntro=null;
-    training={ref,seed,version:1,activityId:"training/"+ref+"/"+activityEvent(),questions:series,answers:[],index:0,done:false,
+    training={ref,seed,version,activityId:"training/"+ref+"/"+activityEvent(),questions:series,answers:[],index:0,done:false,
       deadline:d.trainingStart==="chrono"?Date.now()+540000:null};
     await saveTraining();render();return;
   }

@@ -172,3 +172,14 @@
 .range-buttons { display: flex; gap: .3rem; }
 .range-buttons button { min-width: 44px; min-height: 44px; border-radius: .55rem; border: 1px solid var(--line); background: var(--white); color: var(--ink); font: inherit; cursor: pointer; }
 .comparison-context { font-size: 1.35rem; font-weight: 700; }
+
+.training-figure { width: min(100%, 24rem); margin: .45rem 0 1rem; }
+.training-figure svg { display: block; width: 100%; height: auto; border-radius: .65rem; background: var(--paper); }
+.training-figure text { fill: var(--ink); font: 650 15px system-ui, sans-serif; }
+.training-figure :is(.figure-shape,.figure-line,.figure-accent) { stroke-width: 2; stroke-linejoin: round; }
+.training-figure .figure-shape { fill: var(--white); stroke: var(--ink); }
+.training-figure .figure-base { fill: var(--chart-minor); }
+.training-figure .figure-line { fill: none; stroke: var(--ink); }
+.training-figure .figure-accent { fill: none; stroke: var(--chart-blue); }
+.training-figure .figure-dashed { stroke-dasharray: 5 4; }
+.training-figure .figure-point { fill: var(--chart-blue); }
