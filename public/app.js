@@ -511,15 +511,18 @@ function enterFree(grade=""){
   progress=[];evidence={};selectedGrade=grade;filter=grade;activeKey="";
   training=null;renderTrainingIntro=null;error="";notice="";
 }
-function trainingCorrection(){
-  const index=training.reviewIndex;
-  if(!Number.isInteger(index)||!training.questions[index]) return "";
-  const q=training.questions[index], value=training.answers[index]??"";
+function reviewingRace(){
+  return training?.ref.includes("/can/")&&!training.done&&training.reviewIndex===training.index;
+}
+function trainingCorrection(q,value){
+  value??="";
   const correct=trainingCorrect(q,value);
   const answer=typeof q.answer==="number"?displayNumber(q.answer):q.answer;
   return `<div class="race-correction ${correct?"bravo":"reprendre"}" id="race-correction" role="status" tabindex="-1">
-    <p><strong>Question ${index+1} · ${correct?"Bravo !":value?"À revoir":"Question passée"}</strong> · Réponse : <b>${clean(answer)}</b></p>
-    <p>${clean(q.explain)}</p></div>`;
+    <p><strong>Correction · ${correct?"Bravo !":value?"À revoir":"Question passée"}</strong></p>
+    ${value&&!correct?`<p>Ta réponse : <b>${clean(value)}</b></p>`:""}
+    <p>Réponse attendue : <b>${clean(answer)}</b></p>
+    <p>${clean(trainingExplanation(q))}</p></div>`;
 }
 function restoreTraining(ref){
   const candidate=[...activities.values()].filter(activity=>activity.id.startsWith("training/"+ref+"/"))
@@ -531,11 +534,11 @@ function restoreTraining(ref){
 }
 async function saveTraining(){
   if(!training) return;
-  const {activityId,seed,answers,index,done,deadline,version,reviewIndex}=training;
-  const saved=await saveActivity(activityId,{seed,answers:[...answers],index,done,deadline,...(version?{version}:{}),...(Number.isInteger(reviewIndex)?{reviewIndex}:{}),updated:Date.now()});
+  const {activityId,seed,answers,index,done,deadline,version,reviewIndex,reviewTime}=training;
+  const saved=await saveActivity(activityId,{seed,answers:[...answers],index,done,deadline,...(version?{version}:{}),...(Number.isInteger(reviewIndex)?{reviewIndex}:{}),...(Number.isFinite(reviewTime)?{reviewTime}:{}),updated:Date.now()});
   if(!saved&&!activityPending&&training?.activityId===activityId){
     const canonical=activities.get(activityId);
-    training=canonical?{...training,reviewIndex:null,...canonical.state}:null;
+    training=canonical?{...training,reviewIndex:null,reviewTime:null,...canonical.state}:null;
   }
 }
 function captureTrainingAnswer(){
@@ -545,13 +548,12 @@ function captureTrainingAnswer(){
 async function finishTraining(){
   if(!training||training.done||busy||activityPending) return;
   captureTrainingAnswer();
-  if(training.ref.includes("/can/")&&training.answers[training.index]) training.reviewIndex=training.index;
   training.done=true;
   await saveTraining();render();
 }
 function trainingClock() {
   const node=document.querySelector("#training-clock");
-  if(!training?.deadline||training.done||!node) return;
+  if(!training?.deadline||training.done||reviewingRace()||!node) return;
   const seconds=Math.max(0,Math.ceil((training.deadline-Date.now())/1000));
   node.textContent=`${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,"0")}`;
   if(seconds===0) void finishTraining();
@@ -576,27 +578,51 @@ function trainingPage(type,id) {
   if(training.done){
     const correct=training.questions.filter((q,i)=>trainingCorrect(q,training.answers[i]??"")).length;
     return head+`<section class="paper result"><h2>${correct} / ${training.questions.length}</h2>
-      ${isRace?trainingCorrection():""}
       <p>${isBelt?"Bilan d’entraînement. La validation de la ceinture se fait en classe.":"Relis la méthode des questions qui t’ont posé problème."}</p>
       <button class="primary" data-training-restart>Nouvelle série ↗</button>
       <div class="quiz-review">${training.questions.map((q,i)=>{
         const value=training.answers[i]??"", ok=trainingCorrect(q,value);
         return `<details><summary>${i+1}. ${clean(q.skill)} · ${ok?"Réussie":value?"À revoir":"Non répondue"}</summary>
-          <p>${clean(q.prompt)}</p>${trainingVisual(q.figure)}${comparisonContext(q)}<p><strong>Ta réponse.</strong> ${clean(value||"—")} · <strong>Réponse attendue.</strong> ${typeof q.answer==="number"?displayNumber(q.answer):clean(q.answer)}</p>
-          <p>${clean(q.explain)}</p></details>`;
+          <p>${clean(q.prompt)}</p>${trainingVisual(q.figure,isRace?trainingSolution(q):null)}${comparisonContext(q)}<p><strong>Ta réponse.</strong> ${clean(value||"—")} · <strong>Réponse attendue.</strong> ${typeof q.answer==="number"?displayNumber(q.answer):clean(q.answer)}</p>
+          <p>${clean(isRace?trainingExplanation(q):q.explain)}</p></details>`;
       }).join("")}</div></section>`;
   }
   const q=training.questions[training.index], saved=training.answers[training.index]??"";
-  return head+`<section class="paper">${isRace?trainingCorrection():""}<p class="eyebrow">QUESTION ${training.index+1} / ${training.questions.length}
-    ${training.deadline?' · <output id="training-clock" aria-label="Temps restant"></output>':""}</p><h2>${clean(q.prompt)}</h2>${trainingVisual(q.figure)}
-    <form id="training-answer" class="answer">${q.compare?comparisonFields("answer",q.compare,saved,true):q.options
-      ?touchChoices("answer",q.options.map(option=>[option,option]),{value:saved,immediate:true})
-      :touchNumber("answer",{value:saved,open:true})}
-    <button class="${q.options?"quiet":"primary"}">${q.options?(saved?"Continuer":"Passer"):isRace?"Valider et continuer":training.index+1===training.questions.length?"Voir le bilan":"Question suivante"} ↗</button></form>
-    <div class="pills">${training.index?'<button class="quiet" data-training-back>Question précédente</button>':""}
-    ${isRace&&!training.index&&!training.deadline?`<button class="quiet" data-race-chrono>Repartir avec le chrono de 9 min</button>`:""}
-    <button class="quiet" data-training-finish>Terminer la série</button></div></section>`;
+  const reviewing=reviewingRace();
+  const clock=training.deadline?(reviewing?' · Chrono en pause':' · <output id="training-clock" aria-label="Temps restant"></output>'):"";
+  return head+`<section class="paper"><p class="eyebrow">QUESTION ${training.index+1} / ${training.questions.length}${clock}</p>
+    <h2 id="training-question" tabindex="-1">${clean(q.prompt)}</h2>${trainingVisual(q.figure,reviewing?trainingSolution(q):null)}
+    ${reviewing?`${comparisonContext(q)}${trainingCorrection(q,saved)}
+      <button class="primary" data-race-next>${training.index+1===training.questions.length?"Voir le bilan":"Suivant"} ↗</button>`:
+      `<form id="training-answer" class="answer">${q.compare?comparisonFields("answer",q.compare,saved,true):q.options
+        ?touchChoices("answer",q.options.map(option=>[option,option]),{value:saved,immediate:true})
+        :touchNumber("answer",{value:saved,open:true})}
+      <button class="${q.options?"quiet":"primary"}">${q.options?(saved?"Valider":"Passer"):isRace?"Valider":training.index+1===training.questions.length?"Voir le bilan":"Question suivante"} ↗</button></form>
+      <div class="pills">${training.index?'<button class="quiet" data-training-back>Question précédente</button>':""}
+      ${isRace&&!training.index&&!training.deadline?'<button class="quiet" data-race-chrono>Repartir avec le chrono de 9 min</button>':""}
+      <button class="quiet" data-training-finish>Terminer la série</button></div>`}</section>`;
 }
+function trainingExplanation(q){
+  const f=q.figure;
+  if(f?.kind==="rectangle"){
+    return q.prompt.includes("périmètre")
+      ?`Le contour compte deux côtés de chaque longueur : 2 × (${f.length} + ${f.width}) = ${q.answer} cm.`
+      :`Multiplie la longueur par la largeur : ${f.length} × ${f.width} = ${q.answer} cm².`;
+  }
+  if(f?.kind==="angles") return `La somme des trois angles vaut 180° : 180° − ${f.left}° − ${f.right}° = ${q.answer}°.`;
+  if(f?.kind==="triangleArea") return `Multiplie la base par la hauteur, puis divise par deux : ${f.base} × ${f.height} ÷ 2 = ${q.answer} cm².`;
+  if(f?.kind==="prism") return `Multiplie l’aire de la base par la hauteur : ${f.baseArea} × ${f.height} = ${q.answer} cm³.`;
+  if(f?.kind==="triangleSides"&&f.rightAngle){
+    const [a,b]=f.lengths;
+    return `D’après Pythagore : √(${a}² + ${b}²) = √${a*a+b*b} = ${q.answer} cm.`;
+  }
+  if(f?.kind==="thales") return `Les droites (MN) et (BC) sont parallèles. D’après Thalès : AN = ${f.ac} × ${f.am} ÷ ${f.ab} = ${q.answer}.`;
+  return q.explain;
+}
+function trainingSolution(q){
+  return {answer:typeof q.answer==="number"?displayNumber(q.answer):q.answer,perimeter:q.prompt.includes("périmètre")};
+}
+
 function weeklyPage(){
   const date=new Intl.DateTimeFormat("sv-SE",{timeZone:"Europe/Paris",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
   const week=Math.max(0,Math.floor((Date.parse(date)-Date.UTC(2026,7,31))/604800000));
@@ -1170,15 +1196,21 @@ root.addEventListener("submit",async e=>{
     return;
   }
   if(e.target.id==="training-answer"&&training&&!training.done){
-    if(busy||activityPending) return;
-    if(training.deadline&&Date.now()>=training.deadline) return finishTraining();
+    if(busy||activityPending||reviewingRace()) return;
+    const remaining=training.deadline?training.deadline-Date.now():null;
+    if(remaining!==null&&remaining<=0) return finishTraining();
     training.answers[training.index]=String(values.answer??"").trim();
-    if(training.ref.includes("/can/")) training.reviewIndex=training.index;
-    if(training.index+1===training.questions.length) training.done=true;
+    if(training.ref.includes("/can/")){
+      training.reviewIndex=training.index;
+      training.reviewTime=remaining;
+    }else if(training.index+1===training.questions.length) training.done=true;
     else training.index++;
     await saveTraining();render();
     const correction=document.querySelector("#race-correction");
-    if(correction) correction.focus();
+    if(correction){
+      correction.focus({preventScroll:true});
+      document.querySelector("#training-question")?.scrollIntoView({block:"start"});
+    }
     else document.querySelector("#training-answer button")?.focus({preventScroll:true});
     return;
   }
@@ -1314,7 +1346,17 @@ root.addEventListener("click",async e=>{
     else{renderTrainingIntro=training.ref;training=null;}
     render();return;
   }
-  if(("trainingBack" in d || "trainingFinish" in d)&&training&&!training.done){
+  if("raceNext" in d){
+    if(busy||activityPending||!reviewingRace()) return;
+    if(training.deadline&&Number.isFinite(training.reviewTime)) training.deadline=Date.now()+training.reviewTime;
+    training.reviewIndex=null;training.reviewTime=null;
+    if(training.index+1===training.questions.length) training.done=true;
+    else training.index++;
+    await saveTraining();render();
+    document.querySelector("#training-question")?.focus();
+    return;
+  }
+  if(("trainingBack" in d || "trainingFinish" in d)&&training&&!training.done&&!reviewingRace()){
     if(busy||activityPending) return;
     if(training.deadline&&Date.now()>=training.deadline) return finishTraining();
     if("trainingFinish" in d) return finishTraining();

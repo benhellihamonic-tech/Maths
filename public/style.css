@@ -192,3 +192,9 @@
 .race-correction.bravo { border-color: var(--chart-blue); background: var(--lagoon-gradient); }
 .race-correction p { margin: 0; }
 .race-correction p + p { margin-top: .25rem; }
+
+.training-figure { --figure-solution: #9e2739; --figure-solution-bg: #f8dee2; }
+:root[data-theme="dark"] .training-figure { --figure-solution: #ffb0be; --figure-solution-bg: #462634; }
+.training-figure .figure-solution-line { stroke: var(--figure-solution); stroke-width: 3; }
+.training-figure .figure-solution-text { fill: var(--figure-solution); font-weight: 800; }
+.training-figure .figure-solution-fill { fill: var(--figure-solution-bg); stroke: var(--figure-solution); }

@@ -1,13 +1,13 @@
 // Les schémas et les valeurs de la question utilisent les mêmes données.
-function figureText(x,y,value,anchor="middle"){
-  return `<text x="${x}" y="${y}" text-anchor="${anchor}">${value}</text>`;
+function figureText(x,y,value,anchor="middle",solved=false){
+  return `<text x="${x}" y="${y}" text-anchor="${anchor}"${solved?' class="figure-solution-text"':""}>${value}</text>`;
 }
 function trainingSvg(label,body,viewBox="0 0 320 174"){
   return `<figure class="training-figure"><svg viewBox="${viewBox}" role="img" aria-label="${label}">
     ${body}</svg></figure>`;
 }
 
-export function trainingVisual(figure){
+export function trainingVisual(figure,solution=null){
   if(!figure) return "";
   switch(figure.kind){
     case "rectangle": {
@@ -15,7 +15,7 @@ export function trainingVisual(figure){
       const scale=Math.min(180/length,100/width);
       const w=length*scale,h=width*scale,x=(276-w)/2,y=(150-h)/2;
       return trainingSvg(`Rectangle. Côté horizontal : ${length} cm. Côté vertical : ${width} cm.`,`
-        <rect class="figure-shape" x="${x}" y="${y}" width="${w}" height="${h}"/>
+        <rect class="figure-shape ${solution?(solution.perimeter?"figure-solution-line":"figure-solution-fill"):""}" x="${x}" y="${y}" width="${w}" height="${h}"/>
         ${figureText(x+w/2,y-9,`${length} cm`)}
         ${figureText(x+w+10,y+h/2+5,`${width} cm`,"start")}`,"0 0 320 150");
     }
@@ -27,8 +27,9 @@ export function trainingVisual(figure){
         <path class="figure-line" d="M14 61H306m-8 -5l8 5-8 5"/>
         ${Array.from({length:9},(_,i)=>`<path class="figure-line" d="M${x(i)} 54v14"/>`).join("")}
         ${labels.map(([i,value])=>figureText(x(i),90,value)).join("")}
-        <circle class="figure-point" cx="${x(point)}" cy="61" r="5"/>
-        ${figureText(x(point),42,"A")}`,"0 0 320 104");
+        <circle class="figure-point ${solution?"figure-solution-text":""}" cx="${x(point)}" cy="61" r="5"/>
+        ${figureText(x(point),42,"A","middle",Boolean(solution))}
+        ${solution?figureText(x(point),90,solution.answer,"middle",true):""}`,"0 0 320 104");
     }
     case "angles": {
       const {left,right}=figure;
@@ -38,15 +39,16 @@ export function trainingVisual(figure){
         const radians=angle*Math.PI/180;
         return `<path class="figure-accent" d="M${origin+direction*32} 135 A32 32 0 0 ${direction===1?0:1} ${origin+direction*32*Math.cos(radians)} ${135-32*Math.sin(radians)}"/>`;
       };
-      return trainingSvg(`Triangle. Angle à gauche : ${left} degrés. Angle à droite : ${right} degrés. Angle du sommet inconnu.`,`
+      return trainingSvg(`Triangle. Angle à gauche : ${left} degrés. Angle à droite : ${right} degrés. Angle du sommet : ${solution?solution.answer+" degrés":"inconnu"}.`,`
         <path class="figure-shape" d="M56 135H264L${x} ${y}Z"/>
         ${arc(56,left,1)}${arc(264,right,-1)}
-        ${figureText(56,160,left+"°")}${figureText(264,160,right+"°")}${figureText(x,y-10,"?")}`);
+        ${figureText(56,160,left+"°")}${figureText(264,160,right+"°")}${figureText(x,y-10,solution?solution.answer+"°":"?","middle",Boolean(solution))}`);
     }
     case "triangleArea":
       return trainingSvg(`Triangle de base ${figure.base} cm. Hauteur perpendiculaire à la base : ${figure.height} cm.`,`
         <path class="figure-shape" d="M47 139H272L118 28Z"/>
-        <path class="figure-accent figure-dashed" d="M118 28V139"/>
+        <path class="figure-accent figure-dashed ${solution?"figure-solution-line":""}" d="M118 28V139"/>
+        ${solution?'<path class="figure-line figure-solution-line" d="M47 139H272"/>':""}
         <path class="figure-line" d="M118 129h10v10"/>
         ${figureText(127,85,`${figure.height} cm`,"start")}
         ${figureText(160,161,`${figure.base} cm`)}`);
@@ -54,21 +56,21 @@ export function trainingVisual(figure){
       return trainingSvg(`Prisme droit. Aire de la base triangulaire : ${figure.baseArea} cm². Hauteur : ${figure.height} cm.`,`
         <path class="figure-shape" d="M75 66L232 42V116L75 140Z"/>
         <path class="figure-line figure-dashed" d="M145 17v74l87 25m-87-25-70 49"/>
-        <path class="figure-shape figure-base" d="M75 66L232 42 145 17Z"/>
-        <path class="figure-accent" d="M252 43v73m-5-73h10m-10 73h10"/>
+        <path class="figure-shape figure-base ${solution?"figure-solution-fill":""}" d="M75 66L232 42 145 17Z"/>
+        <path class="figure-accent ${solution?"figure-solution-line":""}" d="M252 43v73m-5-73h10m-10 73h10"/>
         ${figureText(263,84,`${figure.height} cm`,"start")}
         ${figureText(156,161,`Aire de la base : ${figure.baseArea} cm²`)}`);
     case "triangleSides": {
       const [vertical,horizontal,diagonal]=figure.lengths;
       const {rightAngle}=figure;
       const top=rightAngle?62:96;
-      const label=length=>length===null?"?":`${length} cm`;
+      const label=length=>length===null?(solution?`${solution.answer} cm`:"?"):`${length} cm`;
       return trainingSvg(`Triangle. Côté de gauche : ${label(vertical)}. Côté du bas : ${label(horizontal)}. Troisième côté : ${label(diagonal)}.${rightAngle?" Angle droit entre les côtés gauche et bas.":" Schéma non à l’échelle."}`,`
         <path class="figure-shape" d="M62 124H257L${top} 24Z"/>
         ${rightAngle?'<path class="figure-line" d="M62 111h13v13"/>':""}
         ${figureText(53,78,label(vertical),"end")}
         ${figureText(160,147,label(horizontal))}
-        ${figureText(181,61,label(diagonal))}
+        ${figureText(181,61,label(diagonal),"middle",Boolean(solution&&rightAngle))}
         ${rightAngle?"":figureText(160,169,"Figure non à l’échelle.")}`);
     }
     case "thales":
@@ -80,7 +82,9 @@ export function trainingVisual(figure){
         ${figureText(94,59,figure.am)}
         ${figureText(210,20,`AB = ${figure.ab}`)}
         ${figureText(217,158,`AC = ${figure.ac}`)}
-        ${figureText(199,88,"(MN) ∥ (BC)")}`);
+        ${figureText(199,88,"(MN) ∥ (BC)")}
+        ${solution?`<path class="figure-line figure-solution-line" d="M38 83L147.5 112.5"/>
+          ${figureText(83,123,`AN = ${solution.answer}`,"middle",true)}`:""}`);
     default:
       return "";
   }
