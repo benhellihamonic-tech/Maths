@@ -15,6 +15,7 @@ const localDemo = ["localhost","127.0.0.1"].includes(location.hostname);
 const standalone = location.protocol === "file:" || Boolean(window.ARCHIPEL_APERCU);
 let free = false, evidence = {};
 let activities=new Map(), activityHistory=[], classFocus={}, activityPending=null, entryDestination=null;
+let classChapters, coverageGrade=grades[0];
 let user, progress = [], selectedGrade = "", activeKey = "", active = null, busy = false;
 let installPrompt, selectedDomain = "";
 let notice = "", error = "", feedback = "", pending = null, help = false, filter = "", query = "";
@@ -156,15 +157,39 @@ function rankCard(rank, detail=false) {
     <p>${mastered}/${rank.keys.length} notions disponibles maîtrisées ${detail?"":'· <a class="text-link" href="#/profil">Voir mon carnet ↗</a>'}</p>
     ${nextActivities(rank)}</div></section>`;
 }
+const revisionIsland="Bilans et révisions";
+const lessonIslands=new Map(grades.flatMap(grade=>lessonGroups(grade))
+  .flatMap(([name,keys])=>keys.map(key=>[key,name])));
+const chapterIslandOverrides={
+  "4e":{
+    "fractions-addition-soustraction":"Nombres et calculs",
+    "fractions-diviser":"Nombres et calculs",
+    "fractions-priorites":"Nombres et calculs",
+  },
+  "3e":{"equations-premier-degre":"Algèbre"},
+};
+function chapterIsland(grade,chapter){
+  if(chapter.track==="bilans"||chapter.track?.startsWith("Bilans")) return revisionIsland;
+  return chapterIslandOverrides[grade]?.[chapter.id]||chapter.links.map(key=>lessonIslands.get(key)).find(Boolean);
+}
+const seenInClass=(grade,id)=>classChapters?.[grade]?.includes(id)??false;
+function classChapterBadge(chapter){
+  if(!classChapters) return "";
+  return seenInClass(selectedGrade,chapter.id)
+    ? '<span class="class-badge seen"><span aria-hidden="true">✓</span> Vu en classe</span>'
+    : '<span class="class-badge">À venir</span>';
+}
 function parcours() {
   const recent=recentCourse(), focusChapter=findChapter(selectedGrade,classFocus[selectedGrade]);
   const resume = recent?{url:recent.href,label:recent.done?"Revoir mon bilan":"Reprendre mon travail"}:{url:"#/chapitres",label:"Ouvrir mon cours"};
   const rank=classProgress(selectedGrade,evidence);
-  const groups=rank.groups.map(([name,keys])=>[name,keys.filter(inClassRoute)]);
-  const [domain,keys]=groups.find(([name])=>name===selectedDomain)||groups[0];
-  const pins=[[23,62],[47,34],[68,62],[82,26],[10,29],[58,79],[89,65]];
+  const groups=[...rank.groups,[revisionIsland,[]]].map(([name,keys])=>({
+    name, keys:keys.filter(inClassRoute), list:chapters[selectedGrade].filter(chapter=>chapterIsland(selectedGrade,chapter)===name),
+  }));
+  const {name:domain,keys,list}=groups.find(group=>group.name===selectedDomain)||groups[0];
+  const pins=[[23,62],[47,34],[68,62],[82,26],[10,29],[58,79],[89,65],[29,25]];
   return `<div class="intro"><div><p class="eyebrow">✦ &nbsp; TON EXPÉDITION · ${selectedGrade}</p><h1>L’archipel de ${selectedGrade}</h1>
-    <p>Explore les notions et découvre les routes qui les relient.</p></div><div class="pills">
+    <p>Choisis une île pour retrouver les chapitres de ta classe.</p></div><div class="pills">
     ${raceQuickButton(classRaces(selectedGrade).find(race=>race.featured))}
     <a class="quiet" href="${resume.url}">${resume.label} <span>↗</span></a></div></div>
     ${chapters[selectedGrade]?.length?`<section class="paper class-harbor"><p class="eyebrow">MON COURS · ${selectedGrade}</p><h2>${focusChapter?"Chapitre indiqué en classe":"Retrouve le travail de ta classe"}</h2>
@@ -178,15 +203,20 @@ function parcours() {
     ${rankCard(rank)}
     <section class="map-section"><div class="section-row"><div><p class="eyebrow">CARTE DES NOTIONS</p><h2>Les îles de ${selectedGrade}</h2></div><a class="text-link" href="#/classe">Changer de classe ↗</a></div>
     <div class="atlas"><span class="map-index">L’ARCHIPEL DES MATHÉMATIQUES <b>✦</b> ${selectedGrade}</span>
-    ${groups.map(([name,list],i)=>{
-      const completed=list.filter(rank.mastered).length;
-      return `<button data-domain="${name}" aria-label="${name}" aria-pressed="${domain===name}" style="--x:${pins[i][0]}%;--y:${pins[i][1]}%" class="pin ${domain===name?"selected":""}">
-        <span>${i+1}</span><b>${name}</b><small>${completed}/${list.length}</small></button>`;
+    ${groups.map(({name,list,keys},i)=>{
+      if(!list.length&&!keys.length) return "";
+      const covered=list.filter(chapter=>seenInClass(selectedGrade,chapter.id)).length;
+      const count=classChapters&&list.length?`${covered}/${list.length} vus`:"";
+      return `<button data-domain="${name}" aria-controls="island-chapters" aria-label="${name}${count?`, ${covered} sur ${list.length} vus en classe`:""}" aria-pressed="${domain===name}" style="--x:${pins[i][0]}%;--y:${pins[i][1]}%" class="pin ${domain===name?"selected":""}">
+        <span>${i+1}</span><b>${name}</b>${count?`<small>${count}</small>`:""}</button>`;
     }).join("")}
     <span class="map-caption">✧ &nbsp; CHOISIS UN DOMAINE SUR LA CARTE</span></div></section>
-    <div class="section-row after-map"><div><p class="eyebrow">AU PROGRAMME · ${selectedGrade}</p><h2>${domain}</h2></div><a class="text-link" href="#/chapitres">Tous les chapitres ↗</a></div>
-    <div class="domain-tabs pills" aria-label="Domaines">${groups.map(([name])=>`<button data-domain="${name}" aria-pressed="${domain===name}">${name}</button>`).join("")}</div>
-    <div class="cards">${keys.map(key=>card(key,lessons[key])).join("")}</div>`;
+    <div class="domain-tabs pills" role="group" aria-label="Îles de l’archipel">${groups.map(({name,list,keys},i)=>list.length||keys.length?`<button data-domain="${name}" aria-controls="island-chapters" aria-pressed="${domain===name}">${i+1} · ${name}</button>`:"").join("")}</div>
+    <section class="paper class-harbor" id="island-chapters"><div class="section-row"><div><p class="eyebrow">CHAPITRES DE L’ÎLE · ${selectedGrade}</p><h2 id="island-title" tabindex="-1">${domain}</h2></div>
+      <a class="text-link" href="#/chapitres">Toute la progression ↗</a></div>
+      ${list.length?`<ol class="course-list">${list.map(chapter=>classChapterRow(chapter)).join("")}</ol>`:"<p>Cette île propose des ateliers complémentaires.</p>"}
+    </section>
+    ${keys.length?`<details class="paper island-workshops"${list.length?"":" open"}><summary>Ateliers de l’île</summary><div class="cards">${keys.map(key=>card(key,lessons[key])).join("")}</div></details>`:""}`;
 }
 function chapterList() {
   const entries = Object.entries(lessons).filter(([,l])=>(filter?l.grade===filter:teachingGrades.includes(l.grade))&&
@@ -199,6 +229,14 @@ function courseHref(chapter,mode="fiche",grade=selectedGrade){
 function findChapter(grade,id){
   return chapters[grade]?.find(chapter=>chapter.id===id);
 }
+function classChapterRow(chapter,{search=false}={}){
+  const island=search?chapterIsland(selectedGrade,chapter):"";
+  const searchData=search?`data-course-search="${clean([chapter.code,chapter.title,island,...(chapter.refs||[])].join(" "))}"`:"";
+  return `<li ${searchData} class="class-chapter-row"><a href="${courseHref(chapter)}"><small>${clean(chapter.code)}</small> ${clean(chapter.title)}
+    ${island?`<small class="class-chapter-island">Île · ${clean(island)}</small>`:""}</a>
+    <div class="class-chapter-meta">${classChapterBadge(chapter)}
+      <a class="text-link" href="${courseHref(chapter,"evaluation")}" aria-label="Préparer l’évaluation · ${clean(chapter.title)}">Préparer ↗</a></div></li>`;
+}
 function classPlan(){
   const list=(chapters[selectedGrade]||[]).filter(chapter=>route()[1]!=="fil-rouge"||chapter.track==="fil rouge");
   const groups=new Map();
@@ -208,12 +246,11 @@ function classPlan(){
     groups.get(label).push(chapter);
   }
   return `<section class="paper class-harbor"><p class="eyebrow">${selectedGrade==="5e"?"PARCOURS NATIONAL":"PROGRESSION DE CLASSE"} · ${selectedGrade}</p>
-    <h2>${route()[1]==="fil-rouge"?"Le fil rouge de calcul littéral":"Le fil de l’année"}</h2><p>Choisis le chapitre indiqué dans ton cahier.</p>
+    <h2>${route()[1]==="fil-rouge"?"Le fil rouge de calcul littéral":"Le fil de l’année"}</h2><p>Choisis le chapitre indiqué dans ton cahier. ${classChapters?"Le repère « Vu en classe » suit l’avancement de ton cours.":""}</p>
     ${route()[1]==="fil-rouge"?'<p><a href="#/chapitres">Tous les chapitres ↗</a></p>':""}
     <label class="search">Chercher dans mon cours <input id="course-search" type="search" placeholder="Titre ou code du chapitre"></label>
     ${[...groups].map(([name,entries])=>`<section class="course-track"><h3>${clean(name)}</h3><ol class="course-list">
-      ${entries.map(chapter=>`<li data-course-search="${clean([chapter.code,chapter.title,...(chapter.refs||[])].join(" "))}"><a href="${courseHref(chapter)}"><small>${clean(chapter.code)}</small> ${clean(chapter.title)}</a>
-        <a class="text-link" href="${courseHref(chapter,"evaluation")}" aria-label="Préparer l’évaluation · ${clean(chapter.title)}">Préparer ↗</a></li>`).join("")}</ol></section>`).join("")}
+      ${entries.map(chapter=>classChapterRow(chapter,{search:true})).join("")}</ol></section>`).join("")}
     <p id="course-no-results" hidden>Aucun chapitre trouvé.</p></section>`;
 }
 const courseSections={fiche:"Fiche",exercices:"S’entraîner",evaluation:"Préparer l’évaluation"};
@@ -1048,6 +1085,19 @@ function gameView(key) {
 }
 
 let students = [], teacherResult = "";
+function classCoverage(){
+  const list=chapters[coverageGrade];
+  const count=list.filter(chapter=>seenInClass(coverageGrade,chapter.id)).length;
+  return `<section class="paper class-harbor"><h2>Chapitres vus en classe</h2>
+    <p>Ce repère apparaît sur la carte et dans « Mon cours » pour tous les élèves du niveau.</p>
+    <label>Classe <select id="coverage-grade">${grades.map(grade=>`<option ${grade===coverageGrade?"selected":""}>${grade}</option>`).join("")}</select></label>
+    ${classChapters?`<p>${count} sur ${list.length} vus en classe</p><ol class="course-list coverage-list">${list.map(chapter=>{
+      const covered=seenInClass(coverageGrade,chapter.id);
+      return `<li><span>${clean(chapter.code)} · ${clean(chapter.title)}</span><button type="button" class="quiet class-badge ${covered?"seen":""}"
+        aria-pressed="${covered}" aria-label="Vu en classe · ${clean(chapter.title)}" data-coverage-chapter="${chapter.id}">${covered?"✓ Vu en classe":"Marquer comme vu"}</button></li>`;
+    }).join("")}</ol>`:"<p>Le suivi de classe est indisponible. Recharge la page pour réessayer.</p>"}
+    <p id="coverage-result" role="status"></p></section>`;
+}
 function teacher() {
   return `<p class="eyebrow">✦ &nbsp; POSTE D’OBSERVATION</p><h1>Espace prof</h1><p>Comptes élèves et avancement des ateliers.</p>
     <section class="paper class-harbor"><h2>Chapitre indiqué en classe</h2>
@@ -1056,6 +1106,7 @@ function teacher() {
     ${grades.map(grade=>`<optgroup label="${grade}"><option value="${grade}/">Retirer le repère de ${grade}</option>
       ${(chapters[grade]||[]).map(chapter=>`<option value="${grade}/${chapter.id}" ${classFocus[grade]===chapter.id?"selected":""}>${clean(chapter.code+" · "+chapter.title)}</option>`).join("")}</optgroup>`).join("")}
     </select></label><button class="primary" ${busy?"disabled":""}>Mettre à jour le repère ↗</button></form></section>
+    ${classCoverage()}
     <div class="teacher-grid"><article class="paper"><h2>Créer un compte</h2><form id="student">
     <label>Prénom ou pseudo<input name="name" required maxlength="50"></label><label>Identifiant<input name="username" required minlength="3" maxlength="24"></label>
     <label>Classe<select name="grade">${teachingGrades.map(g=>`<option>${g}</option>`).join("")}</select></label>
@@ -1096,6 +1147,10 @@ async function session() {
   activityHistory=data.activityHistory??[];classFocus=data.classFocus??{};
   user=data.user;progress=data.progress;evidence=data.evidence||{};selectedGrade=user.grade||"";filter=selectedGrade;
   if(user.role==="teacher") students=(await api("students")).students;
+}
+async function loadClassChapters(){
+  try { ({classChapters}=await api("class-chapters")); }
+  catch { /* Le cours reste accessible pendant une interruption du suivi. */ }
 }
 function captureDestination(){
   if(["atelier","cours","defis"].includes(route()[0])) entryDestination=route().join("/");
@@ -1145,6 +1200,12 @@ async function commit(request) {
   } finally {busy=false;render();}
 }
 
+root.addEventListener("change",e=>{
+  if(e.target.id!=="coverage-grade"||!grades.includes(e.target.value)) return;
+  coverageGrade=e.target.value;
+  render();
+  document.querySelector("#coverage-grade")?.focus({preventScroll:true});
+});
 root.addEventListener("input",e=>{
   if(e.target.hasAttribute?.("data-min")) e.target.setCustomValidity("");
   if(e.target.id==="course-search"){
@@ -1387,7 +1448,32 @@ root.addEventListener("click",async e=>{
     go("classe");render();return;
   }
   if(d.demo) return signIn(d.demo,{camille:"atelier6",noa:"atelier4",marie:"atelierprof"}[d.demo]);
-  if(d.domain){selectedDomain=d.domain;render();return;}
+  if(d.domain){
+    selectedDomain=d.domain;
+    render();
+    document.querySelector("#island-title")?.focus();
+    return;
+  }
+  if(d.coverageChapter&&user?.role==="teacher"&&!busy){
+    const grade=coverageGrade, chapter=d.coverageChapter;
+    const covered=!seenInClass(grade,chapter);
+    busy=true;
+    let result;
+    try {
+      ({classChapters}=await api("class-chapters",{grade,chapter,covered}));
+      result=covered?"Chapitre marqué comme vu en classe.":"Chapitre remis à venir.";
+    } catch(e){result=e.message;}
+    finally{busy=false;}
+    if(user?.role==="teacher"&&coverageGrade===grade){
+      const scroll=document.querySelector(".coverage-list")?.scrollTop??0;
+      render();
+      const list=document.querySelector(".coverage-list");
+      if(list) list.scrollTop=scroll;
+      document.querySelector(`[data-coverage-chapter="${chapter}"]`)?.focus({preventScroll:true});
+      document.querySelector("#coverage-result").textContent=result;
+    }
+    return;
+  }
   if(d.grade){
     if(busy||!grades.includes(d.grade)) return;
     busy=true;error="";
@@ -1523,4 +1609,7 @@ window.addEventListener("hashchange",()=>{
 if(!standalone&&"serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(()=>{});
 root.innerHTML='<main class="loading">✦ &nbsp; Préparation de ton atlas…</main>';
 if(standalone) render();
-else session().catch(e=>{if(e.status!==401) error="Le serveur est inaccessible.";}).finally(render);
+else Promise.all([
+  session().catch(e=>{if(e.status!==401) error="Le serveur est inaccessible.";}),
+  loadClassChapters(),
+]).finally(render);

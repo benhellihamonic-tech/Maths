@@ -71,6 +71,7 @@ def initialize(path):
             );
         """)
         db.executescript((ROOT / "cloudflare/migrations/0003_activities.sql").read_text(encoding="utf-8"))
+        db.executescript((ROOT / "cloudflare/migrations/0004_class_chapters.sql").read_text(encoding="utf-8"))
         for user, password, name, grade, role in (
             ("camille", "atelier6", "Camille", "6e", "student"),
             ("noa", "atelier4", "Noa", "4e", "student"),
@@ -134,6 +135,14 @@ def class_focus(db):
     return {row["grade"]: row["chapter"] for row in db.execute("SELECT grade,chapter FROM class_focus")}
 
 
+def class_chapter_status(db):
+    status = {grade: [] for grade in GRADES}
+    for row in db.execute("SELECT grade,chapter FROM class_chapters"):
+        if row["grade"] in status:
+            status[row["grade"]].append(row["chapter"])
+    return {"classChapters": status}
+
+
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(ROOT / "public"), **kwargs)
@@ -164,6 +173,8 @@ class Handler(SimpleHTTPRequestHandler):
         if not path.startswith("/api/"):
             return super().do_GET()
         with database(self.server.db_path) as db:
+            if path == "/api/class-chapters":
+                return self.reply(class_chapter_status(db))
             user = self.identity(db)
             if not user:
                 return self.reply({"error": "Connexion requise."}, 401)
@@ -259,6 +270,10 @@ class Handler(SimpleHTTPRequestHandler):
                     return self.reply({"error": "Le moteur de correction local est indisponible."}, 503)
             if path == "/api/class-focus" and user["role"] == "teacher":
                 return self.set_class_focus(db, body)
+            if path == "/api/class-chapters":
+                if user["role"] != "teacher":
+                    return self.reply({"error": "Accès réservé à l’espace prof."}, 403)
+                return self.set_class_chapter(db, body)
             if path in ("/api/students", "/api/reset") and user["role"] == "teacher":
                 return self.manage_student(db, path, body)
         return self.reply({"error": "Action indisponible."}, 404)
@@ -303,6 +318,23 @@ class Handler(SimpleHTTPRequestHandler):
             db.execute("DELETE FROM class_focus WHERE grade=?", (grade,))
         db.commit()
         return self.reply({"classFocus": class_focus(db)})
+
+    def set_class_chapter(self, db, body):
+        grade, chapter, covered = (body.get(key) for key in ("grade", "chapter", "covered"))
+        if grade not in GRADES or not isinstance(chapter, str) or not isinstance(covered, bool):
+            return self.reply({"error": "Chapitre de classe invalide."}, 400)
+        try:
+            valid = progress_operation("isClassChapter", grade, chapter)
+        except (RuntimeError, subprocess.SubprocessError, ValueError):
+            return self.reply({"error": "Le suivi de classe est indisponible."}, 503)
+        if not valid:
+            return self.reply({"error": "Chapitre de classe invalide."}, 400)
+        if covered:
+            db.execute("INSERT OR IGNORE INTO class_chapters (grade,chapter) VALUES (?,?)", (grade, chapter))
+        else:
+            db.execute("DELETE FROM class_chapters WHERE grade=? AND chapter=?", (grade, chapter))
+        db.commit()
+        return self.reply(class_chapter_status(db))
 
     def save_progress(self, db, username, body):
         lesson, mode, submitted, event = (body.get(key) for key in ("lesson", "mode", "state", "event"))

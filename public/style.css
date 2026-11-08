@@ -118,6 +118,17 @@
 .course-list li > a:first-child { font-weight: 700; }
 .course-list li > a:last-child:not(:first-child) { flex: none; }
 .course-list small { display: inline-block; margin-inline-end: .3rem; color: var(--muted); font-weight: 600; }
+.course-list .class-chapter-island { display: block; margin-block-start: .15rem; }
+.class-chapter-meta { display: flex; align-items: center; gap: .45rem .8rem; flex-wrap: wrap; }
+.class-badge { display: inline-block; padding: .2rem .65rem; border-radius: 1rem; color: var(--muted); font-size: .82rem; font-weight: 700; white-space: nowrap; }
+.class-badge.seen { background: var(--lagoon-gradient); color: var(--ink); border: 1px solid var(--chart-reef); }
+.coverage-list { max-height: 26rem; overflow: auto; padding-inline: .15rem .5rem; }
+.coverage-list li { align-items: center; }
+.coverage-list button { min-height: 44px; }
+.island-workshops { margin-block-start: 1rem; }
+.island-workshops > summary { cursor: pointer; font-weight: 750; }
+.island-workshops .cards { margin-block-start: 1rem; }
+#island-title { scroll-margin-block-start: 1.5rem; }
 .course-tabs { margin-block: 1.15rem; }
 .course-tabs a { min-height: 44px; }
 .course-example { margin: .4rem 0 1.1rem; padding: .9rem 1rem; background: var(--lagoon-gradient); border-radius: .75rem; }

@@ -1,6 +1,7 @@
 import { concepts, games, lessons, questions } from "../public/content.js";
 import { commonFactor } from "../public/assessment.js";
 import { updateEvidence } from "../public/progression.js";
+import { chapters } from "../public/chapters.js";
 
 const encode = value => new TextEncoder().encode(value);
 const cookieName = "__Host-archipel";
@@ -218,6 +219,22 @@ async function setClassFocus(db,{grade,chapter}) {
   } else await db.prepare("DELETE FROM class_focus WHERE grade=?").bind(grade).run();
   return reply({classFocus:await classFocus(db)});
 }
+export function isClassChapter(grade,chapter){
+  return grades.includes(grade)&&chapters[grade].some(entry=>entry.id===chapter);
+}
+async function classChapterStatus(db){
+  const status=Object.fromEntries(grades.map(grade=>[grade,[]]));
+  const {results}=await db.prepare("SELECT grade,chapter FROM class_chapters").all();
+  for(const {grade,chapter} of results) status[grade]?.push(chapter);
+  return reply({classChapters:status});
+}
+async function setClassChapter(db,{grade,chapter,covered}){
+  if(typeof covered!=="boolean"||!isClassChapter(grade,chapter)) return fail("Chapitre de classe invalide.",400);
+  const sql=covered?"INSERT OR IGNORE INTO class_chapters (grade,chapter) VALUES (?,?)"
+    :"DELETE FROM class_chapters WHERE grade=? AND chapter=?";
+  await db.prepare(sql).bind(grade,chapter).run();
+  return classChapterStatus(db);
+}
 
 const progressQuery=`SELECT lesson,mode,state,COALESCE(revision,0) AS revision
   FROM progress LEFT JOIN progress_revisions USING (username,lesson,mode)`;
@@ -263,6 +280,7 @@ async function saveProgress(db,username,{lesson,mode,event,state:submitted,revis
 
 async function api(request,env,path) {
   const db=env.DB;
+  if(path==="/api/class-chapters"&&request.method==="GET") return classChapterStatus(db);
   let body;
   if(request.method==="POST") {
     if(request.headers.get("Origin")!==new URL(request.url).origin) return fail("Origine refusée.",403);
@@ -315,6 +333,7 @@ async function api(request,env,path) {
   if(path==="/api/activity"&&user.role==="student") return saveActivity(db,username,body);
   if(path==="/api/progress"&&user.role==="student") return saveProgress(db,username,body);
   if(path==="/api/class-focus"&&user.role==="teacher") return setClassFocus(db,body);
+  if(path==="/api/class-chapters") return user.role==="teacher"?setClassChapter(db,body):fail("Accès réservé à l’espace prof.",403);
   if(["/api/students","/api/reset"].includes(path)&&user.role==="teacher"){
     const account=typeof body.username==="string"?body.username.trim().toLowerCase():"";
     if(!/^[a-z0-9-]{3,24}$/.test(account)) return fail("Identifiant invalide.",400);
@@ -346,6 +365,7 @@ export default {
           env.DB.prepare("SELECT revision FROM activity_events LIMIT 1"),
           env.DB.prepare("SELECT revision FROM progress_revisions LIMIT 1"),
           env.DB.prepare("SELECT chapter FROM class_focus LIMIT 1"),
+          env.DB.prepare("SELECT chapter FROM class_chapters LIMIT 1"),
         ]);
         return reply({ok:true,storage:"d1",activities:true});
       }

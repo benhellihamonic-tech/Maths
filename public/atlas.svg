@@ -49,6 +49,7 @@
     <path d="M-38 378c166-51 267-42 374-24s198 20 287-19 232-29 364-18"/>
   </g>
   <g transform="translate(95 119) rotate(-17) scale(.54)"><use href="#island"/><use href="#palm" transform="translate(26 3) scale(.86)"/></g>
+  <g transform="translate(278 103) rotate(10) scale(.5)"><use href="#island"/><use href="#palm" transform="translate(32 5) scale(.85)"/></g>
   <g transform="translate(221 255) rotate(-8) scale(.98)"><use href="#island"/><use href="#palm" transform="translate(-50 9) scale(.82)"/><use href="#palm" transform="translate(41 3) scale(1.02)"/><use href="#palm" transform="translate(58 13) scale(-.55 .63)"/></g>
   <g transform="translate(451 139) rotate(12) scale(.76)"><use href="#island"/><use href="#palm" transform="translate(-49 9) scale(.85)"/><use href="#palm" transform="translate(39 7) scale(-.79 .82)"/></g>
   <g transform="translate(653 254) rotate(-12) scale(.92)"><use href="#island"/><use href="#palm" transform="translate(-49 11) scale(.74)"/><use href="#palm" transform="translate(39 4) scale(.92)"/></g>
@@ -56,6 +57,7 @@
   <g transform="translate(554 326) rotate(18) scale(.45)"><use href="#island"/><use href="#palm" transform="translate(-30 12) scale(.85)"/></g>
   <g transform="translate(854 270) rotate(-19) scale(.48)"><use href="#island"/><use href="#palm" transform="translate(24 10) scale(1.03)"/></g>
   <path d="M94 121C121 199 161 229 222 253S330 163 449 139 488 294 554 325 594 251 650 253 700 124 785 109 822 199 852 267" stroke="#fff1bd" stroke-width="2.4" stroke-dasharray="2 8" stroke-linecap="round" opacity=".86"/>
+  <path d="M278 103Q304 166 267 211" stroke="#fff1bd" stroke-width="2.4" stroke-dasharray="2 8" stroke-linecap="round" opacity=".86"/>
   <use href="#sail" transform="translate(365 238) rotate(-10) scale(.83)"/>
   <use href="#sail" transform="translate(715 341) rotate(7) scale(.62)"/>
   <g transform="translate(910 348)" stroke="#d5f8ff" stroke-width="1.1">
