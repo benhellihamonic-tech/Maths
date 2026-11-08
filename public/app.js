@@ -175,9 +175,9 @@ function chapterIsland(grade,chapter){
 const seenInClass=(grade,id)=>classChapters?.[grade]?.includes(id)??false;
 function classChapterBadge(chapter){
   if(!classChapters) return "";
-  return seenInClass(selectedGrade,chapter.id)
-    ? '<span class="class-badge seen"><span aria-hidden="true">✓</span> Vu en classe</span>'
-    : '<span class="class-badge">À venir</span>';
+  if(seenInClass(selectedGrade,chapter.id)) return '<span class="class-badge seen"><span aria-hidden="true">✓</span> Vu en classe</span>';
+  if(classFocus[selectedGrade]===chapter.id) return '<span class="class-badge current">En cours</span>';
+  return '<span class="class-badge">À venir</span>';
 }
 function parcours() {
   const recent=recentCourse(), focusChapter=findChapter(selectedGrade,classFocus[selectedGrade]);
@@ -192,7 +192,7 @@ function parcours() {
     <p>Choisis une île pour retrouver les chapitres de ta classe.</p></div><div class="pills">
     ${raceQuickButton(classRaces(selectedGrade).find(race=>race.featured))}
     <a class="quiet" href="${resume.url}">${resume.label} <span>↗</span></a></div></div>
-    ${chapters[selectedGrade]?.length?`<section class="paper class-harbor"><p class="eyebrow">MON COURS · ${selectedGrade}</p><h2>${focusChapter?"Chapitre indiqué en classe":"Retrouve le travail de ta classe"}</h2>
+    ${chapters[selectedGrade]?.length?`<section class="paper class-harbor"><p class="eyebrow">MON COURS · ${selectedGrade}</p><h2>${focusChapter?(seenInClass(selectedGrade,focusChapter.id)?"Chapitre indiqué en classe":"Chapitre en cours"):"Retrouve le travail de ta classe"}</h2>
       ${focusChapter?`<p><strong>${clean(focusChapter.code)} · ${clean(focusChapter.title)}</strong></p>`:""}
       <div class="pills">${focusChapter?`<a class="primary" href="${courseHref(focusChapter)}">Ouvrir le chapitre ↗</a><a class="quiet" href="${courseHref(focusChapter,"evaluation")}">Préparer l’évaluation ↗</a>`:""}
       <a class="${focusChapter?"quiet":"primary"}" href="#/chapitres">Progression et chapitres ↗</a>
@@ -543,7 +543,7 @@ async function openRace(level){
   render();
 }
 function enterFree(grade=""){
-  activities.clear();activityHistory=[];classFocus={};activityPending=null;
+  activities.clear();activityHistory=[];activityPending=null;
   free=true;user={name:"Exploration libre",grade,role:"student"};
   progress=[];evidence={};selectedGrade=grade;filter=grade;activeKey="";
   training=null;renderTrainingIntro=null;error="";notice="";
@@ -1101,7 +1101,7 @@ function classCoverage(){
 function teacher() {
   return `<p class="eyebrow">✦ &nbsp; POSTE D’OBSERVATION</p><h1>Espace prof</h1><p>Comptes élèves et avancement des ateliers.</p>
     <section class="paper class-harbor"><h2>Chapitre indiqué en classe</h2>
-    <p>Choisis le chapitre à mettre en tête du parcours. Tu peux aussi retirer le repère.</p>
+    <p>Choisis le chapitre en cours. Il apparaît en tête du parcours. Tu peux aussi retirer le repère.</p>
     <form id="class-focus"><label>Classe et chapitre <select name="focus">
     ${grades.map(grade=>`<optgroup label="${grade}"><option value="${grade}/">Retirer le repère de ${grade}</option>
       ${(chapters[grade]||[]).map(chapter=>`<option value="${grade}/${chapter.id}" ${classFocus[grade]===chapter.id?"selected":""}>${clean(chapter.code+" · "+chapter.title)}</option>`).join("")}</optgroup>`).join("")}
@@ -1144,12 +1144,12 @@ async function session() {
   const data=await api("me");
   activities=new Map((data.activities??[]).map(activity=>[activity.id,activity]));
   training=null;renderTrainingIntro=null;
-  activityHistory=data.activityHistory??[];classFocus=data.classFocus??{};
+  activityHistory=data.activityHistory??[];
   user=data.user;progress=data.progress;evidence=data.evidence||{};selectedGrade=user.grade||"";filter=selectedGrade;
   if(user.role==="teacher") students=(await api("students")).students;
 }
 async function loadClassChapters(){
-  try { ({classChapters}=await api("class-chapters")); }
+  try { ({classChapters,classFocus={}}=await api("class-chapters")); }
   catch { /* Le cours reste accessible pendant une interruption du suivi. */ }
 }
 function captureDestination(){
@@ -1460,7 +1460,7 @@ root.addEventListener("click",async e=>{
     busy=true;
     let result;
     try {
-      ({classChapters}=await api("class-chapters",{grade,chapter,covered}));
+      ({classChapters,classFocus={}}=await api("class-chapters",{grade,chapter,covered}));
       result=covered?"Chapitre marqué comme vu en classe.":"Chapitre remis à venir.";
     } catch(e){result=e.message;}
     finally{busy=false;}
@@ -1487,7 +1487,7 @@ root.addEventListener("click",async e=>{
   if("filter" in d){filter=d.filter;render();return;}
   if(d.action==="logout"){
     if(busy) return;
-    try{if(!free) await api("logout",{});free=false;user=null;progress=[];evidence={};training=null;activities.clear();activityHistory=[];classFocus={};activityPending=null;activeKey="";pending=null;notice="";error="";go("parcours");render();}
+    try{if(!free) await api("logout",{});free=false;user=null;progress=[];evidence={};training=null;activities.clear();activityHistory=[];activityPending=null;activeKey="";pending=null;notice="";error="";go("parcours");render();}
     catch(e){if(e.status===401){user=null;activities.clear();activityHistory=[];activityPending=null;training=null;render();}
       else {error="Déconnexion impossible. Réessaie quand le serveur est disponible.";render();}}
     return;

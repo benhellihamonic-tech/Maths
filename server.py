@@ -140,7 +140,7 @@ def class_chapter_status(db):
     for row in db.execute("SELECT grade,chapter FROM class_chapters"):
         if row["grade"] in status:
             status[row["grade"]].append(row["chapter"])
-    return {"classChapters": status}
+    return {"classChapters": status, "classFocus": class_focus(db)}
 
 
 class Handler(SimpleHTTPRequestHandler):

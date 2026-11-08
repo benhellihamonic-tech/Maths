@@ -224,9 +224,12 @@ export function isClassChapter(grade,chapter){
 }
 async function classChapterStatus(db){
   const status=Object.fromEntries(grades.map(grade=>[grade,[]]));
-  const {results}=await db.prepare("SELECT grade,chapter FROM class_chapters").all();
+  const [{results},focus]=await Promise.all([
+    db.prepare("SELECT grade,chapter FROM class_chapters").all(),
+    classFocus(db),
+  ]);
   for(const {grade,chapter} of results) status[grade]?.push(chapter);
-  return reply({classChapters:status});
+  return reply({classChapters:status,classFocus:focus});
 }
 async function setClassChapter(db,{grade,chapter,covered}){
   if(typeof covered!=="boolean"||!isClassChapter(grade,chapter)) return fail("Chapitre de classe invalide.",400);

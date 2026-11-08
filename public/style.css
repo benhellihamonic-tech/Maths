@@ -122,6 +122,7 @@
 .class-chapter-meta { display: flex; align-items: center; gap: .45rem .8rem; flex-wrap: wrap; }
 .class-badge { display: inline-block; padding: .2rem .65rem; border-radius: 1rem; color: var(--muted); font-size: .82rem; font-weight: 700; white-space: nowrap; }
 .class-badge.seen { background: var(--lagoon-gradient); color: var(--ink); border: 1px solid var(--chart-reef); }
+.class-badge.current { background: var(--sand-gradient); color: var(--sand-ink); border: 1px solid var(--sand); }
 .coverage-list { max-height: 26rem; overflow: auto; padding-inline: .15rem .5rem; }
 .coverage-list li { align-items: center; }
 .coverage-list button { min-height: 44px; }
