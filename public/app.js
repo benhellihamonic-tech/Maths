@@ -24,7 +24,7 @@ const fresh = (level=0) => ({step:0,done:false,quizVersion:5,seed:Math.floor(Mat
 const route = () => location.hash.slice(2).split("/");
 const go = path => { location.hash = "/" + path; };
 const get = (lesson,mode) => progress.find(p=>p.lesson===lesson && p.mode===mode);
-const credit = '<footer class="site-credit">Réalisé par <strong>Marie HAMONIC</strong> · collège Jean Moulin</footer>';
+const credit = '<footer class="site-credit">Réalisé par <strong>Madame Hamonic</strong> · collège Jean Moulin</footer>';
 const totalStars = () => progress.filter(p=>p.mode==="jeu").reduce((a,p)=>a+(p.bestStars||p.stars||0),0);
 
 const themeKey = "archipel-theme";
