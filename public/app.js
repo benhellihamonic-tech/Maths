@@ -82,6 +82,8 @@ function login() {
     <section class="login-form"><div><div class="login-theme">${themeButton()}</div><p class="eyebrow">● &nbsp; LE POINT DE DÉPART</p><h2>Bienvenue à bord.</h2>
     <p>Explore librement ou connecte-toi pour retrouver ta progression.</p>
     <button class="primary" data-action="free">Parcours libre <span>↗</span></button>
+    <section class="race-quick"><h3>Course aux nombres</h3>
+      <div class="pills">${teachingGrades.map(grade=>`<button type="button" class="quiet" data-race-grade="${grade}" aria-label="Lancer la Course aux nombres pour la ${grade}">${grade}</button>`).join("")}</div></section>
     ${standalone?'<p class="footnote">Version autonome · pour utiliser un compte, ouvre Lancer-Archipel.command dans le Finder.</p>':`<form id="login"><label>Identifiant<input name="username" required autocomplete="username"></label>
     <label>Mot de passe<input name="password" type="password" required autocomplete="current-password"></label>
     <div class="pills"><button class="primary" name="account" value="login" ${busy?"disabled":""}>Se connecter ↗</button><button class="quiet" name="account" value="create" ${busy?"disabled":""}>Créer mon compte</button></div><small>Choisis un mot de passe d’au moins 8 caractères pour créer un compte.</small></form>`}
@@ -162,7 +164,9 @@ function parcours() {
   const [domain,keys]=groups.find(([name])=>name===selectedDomain)||groups[0];
   const pins=[[23,62],[47,34],[68,62],[82,26],[10,29],[58,79],[89,65]];
   return `<div class="intro"><div><p class="eyebrow">✦ &nbsp; TON EXPÉDITION · ${selectedGrade}</p><h1>L’archipel de ${selectedGrade}</h1>
-    <p>Explore les notions et découvre les routes qui les relient.</p></div><a class="primary" href="${resume.url}">${resume.label} <span>↗</span></a></div>
+    <p>Explore les notions et découvre les routes qui les relient.</p></div><div class="pills">
+    ${raceQuickButton(classRaces(selectedGrade).find(race=>race.featured))}
+    <a class="quiet" href="${resume.url}">${resume.label} <span>↗</span></a></div></div>
     ${chapters[selectedGrade]?.length?`<section class="paper class-harbor"><p class="eyebrow">MON COURS · ${selectedGrade}</p><h2>${focusChapter?"Chapitre indiqué en classe":"Retrouve le travail de ta classe"}</h2>
       ${focusChapter?`<p><strong>${clean(focusChapter.code)} · ${clean(focusChapter.title)}</strong></p>`:""}
       <div class="pills">${focusChapter?`<a class="primary" href="${courseHref(focusChapter)}">Ouvrir le chapitre ↗</a><a class="quiet" href="${courseHref(focusChapter,"evaluation")}">Préparer l’évaluation ↗</a>`:""}
@@ -477,6 +481,46 @@ function chapitres() {
 }
 
 let training=null, trainingTimer=null, renderTrainingIntro=null;
+function raceQuickButton(race){
+  return race?`<button type="button" class="primary" data-race-level="${race.level}">Course aux nombres · ${race.name} ↗</button>`:"";
+}
+async function startTraining(type,id,mode){
+  const seed=Math.floor(Math.random()*0x7fffffff);
+  const ref=[selectedGrade,type,id].join("/");
+  const version=type==="can"?2:1;
+  const questions=trainingSet(type,selectedGrade,id,seed,version);
+  if(!questions.length) return;
+  renderTrainingIntro=null;
+  training={ref,seed,version,activityId:"training/"+ref+"/"+activityEvent(),questions,answers:[],index:0,done:false,
+    deadline:mode==="chrono"?Date.now()+540000:null};
+  await saveTraining();
+}
+async function openRace(level){
+  if(!classRaces(selectedGrade).some(race=>race.level===level)) return;
+  const ref=[selectedGrade,"can",level].join("/");
+  const saved=training?.ref===ref?training:restoreTraining(ref);
+  go("defis/can/"+level);
+  if(saved&&!saved.done){
+    renderTrainingIntro=null;training=saved;
+  }else await startTraining("can",level,"libre");
+  render();
+}
+function enterFree(grade=""){
+  activities.clear();activityHistory=[];classFocus={};activityPending=null;
+  free=true;user={name:"Exploration libre",grade,role:"student"};
+  progress=[];evidence={};selectedGrade=grade;filter=grade;activeKey="";
+  training=null;renderTrainingIntro=null;error="";notice="";
+}
+function trainingCorrection(){
+  const index=training.reviewIndex;
+  if(!Number.isInteger(index)||!training.questions[index]) return "";
+  const q=training.questions[index], value=training.answers[index]??"";
+  const correct=trainingCorrect(q,value);
+  const answer=typeof q.answer==="number"?displayNumber(q.answer):q.answer;
+  return `<div class="race-correction ${correct?"bravo":"reprendre"}" id="race-correction" role="status" tabindex="-1">
+    <p><strong>Question ${index+1} · ${correct?"Bravo !":value?"À revoir":"Question passée"}</strong> · Réponse : <b>${clean(answer)}</b></p>
+    <p>${clean(q.explain)}</p></div>`;
+}
 function restoreTraining(ref){
   const candidate=[...activities.values()].filter(activity=>activity.id.startsWith("training/"+ref+"/"))
     .sort((a,b)=>b.state.updated-a.state.updated)[0];
@@ -487,11 +531,11 @@ function restoreTraining(ref){
 }
 async function saveTraining(){
   if(!training) return;
-  const {activityId,seed,answers,index,done,deadline,version}=training;
-  const saved=await saveActivity(activityId,{seed,answers:[...answers],index,done,deadline,...(version?{version}:{}),updated:Date.now()});
+  const {activityId,seed,answers,index,done,deadline,version,reviewIndex}=training;
+  const saved=await saveActivity(activityId,{seed,answers:[...answers],index,done,deadline,...(version?{version}:{}),...(Number.isInteger(reviewIndex)?{reviewIndex}:{}),updated:Date.now()});
   if(!saved&&!activityPending&&training?.activityId===activityId){
     const canonical=activities.get(activityId);
-    training=canonical?{...training,...canonical.state}:null;
+    training=canonical?{...training,reviewIndex:null,...canonical.state}:null;
   }
 }
 function captureTrainingAnswer(){
@@ -501,6 +545,7 @@ function captureTrainingAnswer(){
 async function finishTraining(){
   if(!training||training.done||busy||activityPending) return;
   captureTrainingAnswer();
+  if(training.ref.includes("/can/")&&training.answers[training.index]) training.reviewIndex=training.index;
   training.done=true;
   await saveTraining();render();
 }
@@ -523,7 +568,7 @@ function trainingPage(type,id) {
   if(training?.ref!==ref&&renderTrainingIntro!==ref) training=restoreTraining(ref);
   const head=`<a class="text-link" href="#/defis">← Les entraînements</a><p class="eyebrow">✦ &nbsp; ${selectedGrade}</p><h1>${title}</h1>`;
   if(training?.ref!==ref){
-    return head+`<section class="paper"><p>${isRace?"30 questions. Pour une simulation, réponds de tête en 9 minutes, sans calculatrice ni brouillon.":isBelt?"12 questions réparties entre les six compétences de la ceinture.":"6 questions pour retravailler l’automatisme."} Le corrigé apparaît à la fin.</p>
+    return head+`<section class="paper"><p>${isRace?"30 questions à faire de tête, avec ou sans chrono. La correction s’affiche après chaque réponse.":isBelt?"12 questions réparties entre les six compétences de la ceinture.":"6 questions pour retravailler l’automatisme."}${isRace?"":" Le corrigé apparaît à la fin."}</p>
       <div class="pills"><button class="primary" data-training-start="libre">Commencer sans chrono ↗</button>
       ${isRace?'<button class="quiet" data-training-start="chrono">Lancer le chrono de 9 min ↗</button>':""}</div>
       ${race?`<p class="footnote">Série originale inspirée des sujets de la Course aux nombres. <a class="text-link" href="${officialCANArchives}" target="_blank" rel="noopener">Retrouver les sujets dans les annales officielles ↗</a></p>`:""}</section>`;
@@ -531,6 +576,7 @@ function trainingPage(type,id) {
   if(training.done){
     const correct=training.questions.filter((q,i)=>trainingCorrect(q,training.answers[i]??"")).length;
     return head+`<section class="paper result"><h2>${correct} / ${training.questions.length}</h2>
+      ${isRace?trainingCorrection():""}
       <p>${isBelt?"Bilan d’entraînement. La validation de la ceinture se fait en classe.":"Relis la méthode des questions qui t’ont posé problème."}</p>
       <button class="primary" data-training-restart>Nouvelle série ↗</button>
       <div class="quiz-review">${training.questions.map((q,i)=>{
@@ -541,13 +587,14 @@ function trainingPage(type,id) {
       }).join("")}</div></section>`;
   }
   const q=training.questions[training.index], saved=training.answers[training.index]??"";
-  return head+`<section class="paper"><p class="eyebrow">QUESTION ${training.index+1} / ${training.questions.length}
+  return head+`<section class="paper">${isRace?trainingCorrection():""}<p class="eyebrow">QUESTION ${training.index+1} / ${training.questions.length}
     ${training.deadline?' · <output id="training-clock" aria-label="Temps restant"></output>':""}</p><h2>${clean(q.prompt)}</h2>${trainingVisual(q.figure)}
     <form id="training-answer" class="answer">${q.compare?comparisonFields("answer",q.compare,saved,true):q.options
       ?touchChoices("answer",q.options.map(option=>[option,option]),{value:saved,immediate:true})
       :touchNumber("answer",{value:saved,open:true})}
-    <button class="${q.options?"quiet":"primary"}">${q.options?(saved?"Continuer":"Passer"):training.index+1===training.questions.length?"Voir le bilan":"Question suivante"} ↗</button></form>
+    <button class="${q.options?"quiet":"primary"}">${q.options?(saved?"Continuer":"Passer"):isRace?"Valider et continuer":training.index+1===training.questions.length?"Voir le bilan":"Question suivante"} ↗</button></form>
     <div class="pills">${training.index?'<button class="quiet" data-training-back>Question précédente</button>':""}
+    ${isRace&&!training.index&&!training.deadline?`<button class="quiet" data-race-chrono>Repartir avec le chrono de 9 min</button>`:""}
     <button class="quiet" data-training-finish>Terminer la série</button></div></section>`;
 }
 function weeklyPage(){
@@ -586,8 +633,8 @@ function defis() {
   return `<p class="eyebrow">✦ &nbsp; LE COIN DES RÉFLEXES</p><h1>Entraînement · ${selectedGrade}</h1>
     ${selectedGrade==="6e"?'<section class="paper class-harbor"><h2>Les rituels de 6e</h2><p>Automatismes du cahier et problèmes de la semaine, avec schémas en barres.</p><a class="primary" href="#/defis/semaine">Ouvrir les rituels ↗</a></section>':""}
     ${raceCards.length?`<section class="paper class-harbor"><h2>Course aux nombres</h2><p>Deux parcours séparés. Le niveau conseillé correspond à la période de l’année.</p>
-      <div class="cards">${raceCards.map(r=>`<a class="chapter-card" href="#/defis/can/${r.level}"><strong>${r.name}</strong>
-        ${r.featured?'<small>Conseillé en ce moment</small>':""}<span class="arrow">↗</span></a>`).join("")}</div>
+      <div class="cards">${raceCards.map(r=>`<button type="button" class="chapter-card race-level" data-race-level="${r.level}"><strong>${r.name}</strong>
+        ${r.featured?'<small>Conseillé en ce moment</small>':""}<span class="arrow">↗</span></button>`).join("")}</div>
       <p><a class="text-link" href="${officialCANArchives}" target="_blank" rel="noopener">Annales officielles ↗</a> · <a class="text-link" href="${officialCAN}" target="_blank" rel="noopener">Règles du concours ↗</a></p></section>`:""}
     ${classBelts[selectedGrade]?`<section class="paper class-harbor"><h2>Ceintures de calcul mental</h2><p>Choisis la couleur que tu prépares.</p>
       <div class="cards">${beltColors.map((color,i)=>`<a class="chapter-card" href="#/defis/belt/${i}"><strong>Ceinture ${color.toLowerCase()}</strong><small>12 questions</small><span class="arrow">↗</span></a>`).join("")}</div></section>`:""}
@@ -1126,10 +1173,14 @@ root.addEventListener("submit",async e=>{
     if(busy||activityPending) return;
     if(training.deadline&&Date.now()>=training.deadline) return finishTraining();
     training.answers[training.index]=String(values.answer??"").trim();
+    if(training.ref.includes("/can/")) training.reviewIndex=training.index;
     if(training.index+1===training.questions.length) training.done=true;
     else training.index++;
     await saveTraining();render();
-    document.querySelector("#training-answer button")?.focus({preventScroll:true});return;
+    const correction=document.querySelector("#race-correction");
+    if(correction) correction.focus();
+    else document.querySelector("#training-answer button")?.focus({preventScroll:true});
+    return;
   }
   if(busy||pending) return;
   if(e.target.id==="concept-answer"){
@@ -1240,30 +1291,36 @@ root.addEventListener("click",async e=>{
     await saveActivity(d.courseReset,{answers:[],done:false,updated:Date.now()});
     render();return;
   }
-  if(d.trainingStart){
+  if(d.raceGrade){
+    if(user||busy||!grades.includes(d.raceGrade)) return;
+    enterFree(d.raceGrade);entryDestination=null;
+    const race=classRaces(selectedGrade).find(race=>race.featured);
+    if(race) await openRace(race.level);
+    return;
+  }
+  if(d.raceLevel){
+    if(!selectedGrade||busy||activityPending) return;
+    await openRace(d.raceLevel);return;
+  }
+  if(d.trainingStart||"raceChrono" in d){
     const [tab,type,id]=route();
-    if(tab!=="defis") return;
-    if(busy||activityPending) return;
-    const seed=Math.floor(Math.random()*0x7fffffff), ref=[selectedGrade,type,id].join("/");
-    const version=type==="can"?2:1;
-    const series=trainingSet(type,selectedGrade,id,seed,version);
-    if(!series.length) return;
-    renderTrainingIntro=null;
-    training={ref,seed,version,activityId:"training/"+ref+"/"+activityEvent(),questions:series,answers:[],index:0,done:false,
-      deadline:d.trainingStart==="chrono"?Date.now()+540000:null};
-    await saveTraining();render();return;
+    if(tab!=="defis"||busy||activityPending) return;
+    await startTraining(type,id,d.trainingStart||"chrono");render();return;
   }
   if("trainingRestart" in d){
-    if(busy||activityPending) return;
-    renderTrainingIntro=training.ref;training=null;render();return;
+    if(!training||busy||activityPending) return;
+    const [,type,id]=training.ref.split("/");
+    if(type==="can") await startTraining(type,id,training.deadline?"chrono":"libre");
+    else{renderTrainingIntro=training.ref;training=null;}
+    render();return;
   }
   if(("trainingBack" in d || "trainingFinish" in d)&&training&&!training.done){
     if(busy||activityPending) return;
-    if(busy) return;
     if(training.deadline&&Date.now()>=training.deadline) return finishTraining();
     if("trainingFinish" in d) return finishTraining();
     captureTrainingAnswer();
     training.index=Math.max(0,training.index-1);
+    training.reviewIndex=null;
     await saveTraining();render();return;
   }
   if(d.action==="theme"){
@@ -1284,9 +1341,8 @@ root.addEventListener("click",async e=>{
     const prompt=installPrompt;installPrompt=undefined;await prompt.prompt();render();return;
   }
   if(d.action==="free"){
-    captureDestination();activities.clear();activityHistory=[];classFocus={};activityPending=null;
-    free=true;user={name:"Exploration libre",grade:"",role:"student"};progress=[];evidence={};selectedGrade="";filter="";activeKey="";
-    error="";go("classe");render();return;
+    captureDestination();enterFree();
+    go("classe");render();return;
   }
   if(d.demo) return signIn(d.demo,{camille:"atelier6",noa:"atelier4",marie:"atelierprof"}[d.demo]);
   if(d.domain){selectedDomain=d.domain;render();return;}

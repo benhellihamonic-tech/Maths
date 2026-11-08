@@ -183,3 +183,12 @@
 .training-figure .figure-accent { fill: none; stroke: var(--chart-blue); }
 .training-figure .figure-dashed { stroke-dasharray: 5 4; }
 .training-figure .figure-point { fill: var(--chart-blue); }
+
+.race-quick { margin-block: .8rem; }
+.race-quick h3 { margin: 0 0 .35rem; font-size: 1rem; }
+.race-quick button { min-height: 44px; min-width: 44px; }
+.race-level { text-align: left; }
+.race-correction { margin: 0 0 1rem; padding: .6rem .85rem; border-left: 4px solid var(--chart-sand); border-radius: .45rem; background: var(--sand-gradient); scroll-margin-top: 1rem; }
+.race-correction.bravo { border-color: var(--chart-blue); background: var(--lagoon-gradient); }
+.race-correction p { margin: 0; }
+.race-correction p + p { margin-top: .25rem; }
