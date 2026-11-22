@@ -200,10 +200,11 @@
 .race-quick h3 { margin: 0 0 .35rem; font-size: 1rem; }
 .race-quick button { min-height: 44px; min-width: 44px; }
 .race-level { text-align: left; }
-.race-correction { margin: 0 0 1rem; padding: .6rem .85rem; border-left: 4px solid var(--chart-sand); border-radius: .45rem; background: var(--sand-gradient); scroll-margin-top: 1rem; }
-.race-correction.bravo { border-color: var(--chart-blue); background: var(--lagoon-gradient); }
-.race-correction p { margin: 0; }
-.race-correction p + p { margin-top: .25rem; }
+.training-correction { margin: 0 0 1rem; padding: .6rem .85rem; border-left: 4px solid var(--chart-sand); border-radius: .45rem; background: var(--sand-gradient); scroll-margin-top: 1rem; }
+.training-correction.bravo { border-color: var(--chart-blue); background: var(--lagoon-gradient); }
+.training-correction p { margin: 0; }
+.training-correction p + p { margin-top: .25rem; }
+sup { font-size: .72em; line-height: 0; vertical-align: super; }
 
 .training-figure { --figure-solution: #9e2739; --figure-solution-bg: #f8dee2; }
 :root[data-theme="dark"] .training-figure { --figure-solution: #ffb0be; --figure-solution-bg: #462634; }

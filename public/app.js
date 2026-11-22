@@ -20,6 +20,8 @@ let user, progress = [], selectedGrade = "", activeKey = "", active = null, busy
 let installPrompt, selectedDomain = "";
 let notice = "", error = "", feedback = "", pending = null, help = false, filter = "", query = "";
 const clean = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
+const mathText = value => clean(value).replace(/\^(?:\(([+−-]?\d+)\)|([+−-]?\d+))/g,
+  (_,parenthesized,exponent)=>`<sup>${parenthesized??exponent}</sup>`);
 const cap = (n,a,b) => Math.max(a,Math.min(b,n));
 const fresh = (level=0) => ({step:0,done:false,quizVersion:5,seed:Math.floor(Math.random()*0x7fffffff),level,answers:[],stars:0,help:false,game:[]});
 const route = () => location.hash.slice(2).split("/");
@@ -303,7 +305,7 @@ function touchChoices(name,options,{value="",immediate=false,label="Choisis ta r
   return `<div class="touch-select ${className}" data-touch-select ${immediate?'data-immediate':""}>
     <input type="hidden" name="${name}" value="${clean(value)}">
     <div class="touch-options" role="group" aria-label="${clean(label)}">${options.map(([key,text,description])=>`
-      <button type="button" class="touch-option" data-touch-value="${clean(key)}" aria-pressed="${String(key)===String(value)}"${description?` aria-label="${clean(description)}"`:""}>${clean(text)}</button>`).join("")}</div></div>`;
+      <button type="button" class="touch-option" data-touch-value="${clean(key)}" aria-pressed="${String(key)===String(value)}"${description?` aria-label="${clean(description)}"`:""}>${mathText(text)}</button>`).join("")}</div></div>`;
 }
 function comparisonFields(name,comparison,value,immediate=false,indexed=false){
   const options=Object.entries(relationLabels).map(([symbol,label],i)=>[indexed?i:symbol,symbol,label]);
@@ -350,7 +352,7 @@ function chapterAnswers(items,values={}){
       :order?orderFields(order.options,{name,value})
       :item.written?`<label>Ta démarche <textarea name="${name}" rows="3" maxlength="1200" placeholder="Tu peux aussi rédiger sur ton cahier.">${clean(value)}</textarea></label>`
       :touchNumber(name,{value});
-    return `<fieldset class="chapter-question" data-item-skill="${item.skill}"><legend>${i+1}. ${clean(prompt)}</legend>${field}</fieldset>`;
+    return `<fieldset class="chapter-question" data-item-skill="${item.skill}"><legend>${i+1}. ${mathText(prompt)}</legend>${field}</fieldset>`;
   }).join("");
 }
 function chapterCorrect(item,value){
@@ -372,8 +374,8 @@ function chapterBilan(chapter,items,answers,grade){
   return `<section class="paper"><h2 id="course-feedback" tabindex="-1">Ton bilan</h2>
     <p>${auto?`${correct} / ${auto} réponses vérifiées automatiquement. `:""}Les démarches rédigées se comparent au corrigé, sur ton cahier ou à l’écran.</p>
     ${items.map((item,i)=>`<details class="course-correction"><summary>${i+1}. ${clean(chapter.skills[item.skill])} · ${chapterResponseStatus(item,answers[i])}</summary>
-      <p>${clean(item.prompt)}</p>${answers[i]?`<p><b>Ta réponse</b> ${clean(answers[i]).replaceAll("\n","<br>")}</p>`:""}
-      <p><b>Réponse attendue</b> ${clean(item.answer)}</p><p>${clean(item.explain)}</p>
+      <p>${mathText(item.prompt)}</p>${answers[i]?`<p><b>Ta réponse</b> ${clean(answers[i]).replaceAll("\n","<br>")}</p>`:""}
+      <p><b>Réponse attendue</b> ${mathText(item.answer)}</p><p>${mathText(item.explain)}</p>
       <p><a class="text-link" href="${courseHref(chapter,"exercices",grade)}/1/${item.skill}">Revoir cette compétence ↗</a></p></details>`).join("")}
     <div class="pills"><a class="quiet" href="${courseHref(chapter,"fiche",grade)}">Relire la fiche ↗</a>
     <a class="quiet" href="${courseHref(chapter,"exercices",grade)}">Retravailler le chapitre ↗</a></div></section>`;
@@ -476,9 +478,9 @@ function courseView(grade,id,mode,formPart){
   const skills=`<ul>${chapter.skills.map(skill=>`<li>${clean(skill)}</li>`).join("")}</ul>`;
   if(mode==="fiche"){
     const connected=chapter.links.filter(key=>Object.hasOwn(lessons,key));
-    return title+`<section class="paper"><h2>Exemple</h2><p class="course-example">${clean(chapter.example)}</p>${chapterFigure(grade,id)}
+    return title+`<section class="paper"><h2>Exemple</h2><p class="course-example">${mathText(chapter.example)}</p>${chapterFigure(grade,id)}
       ${chapterLab(chapter,grade)}
-      <details><summary>Rappel et méthode</summary><p>${clean(chapter.recap)}</p></details>
+      <details><summary>Rappel et méthode</summary><p>${mathText(chapter.recap)}</p></details>
       <details><summary>Ce que je dois savoir faire</summary>${skills}</details>
       ${connected.length?`<details><summary>Ateliers liés à ce chapitre</summary><ul>${connected.map(key=>`<li><a href="#/atelier/${key}">${clean(lessons[key].title)}${lessons[key].grade!==grade?` · rappel de ${lessons[key].grade}`:""} ↗</a></li>`).join("")}</ul></details>`:""}
       <p><a class="primary" href="${courseHref(chapter,"exercices",grade)}">M’entraîner ↗</a></p></section>`;
@@ -492,7 +494,7 @@ function courseView(grade,id,mode,formPart){
     ${assessmentMode?`<p>Fais les exercices avant d’ouvrir le corrigé. Tu peux rédiger sur ton cahier.</p>
       <div class="pills"><a class="quiet" href="${path}" ${form===1?'aria-current="page"':""}>Sujet A</a><a class="quiet" href="${path}/2" ${form===2?'aria-current="page"':""}>Sujet B</a></div>
       <details><summary>Les compétences évaluées</summary>${skills}</details>`:
-      `<details><summary>Rappel de méthode</summary><p>${clean(chapter.recap)}</p></details>`}
+      `<details><summary>Rappel de méthode</summary><p>${mathText(chapter.recap)}</p></details>`}
     ${saved?.done?`<button class="quiet" data-course-reset="${ref}">Refaire cette série</button>`:`<form id="course-answers" data-course-ref="${ref}">
       ${chapterAnswers(items,values)}
       <div class="pills"><button class="primary" name="submitMode" value="finish">Corriger mon travail ↗</button>
@@ -548,18 +550,18 @@ function enterFree(grade=""){
   progress=[];evidence={};selectedGrade=grade;filter=grade;activeKey="";
   training=null;renderTrainingIntro=null;error="";notice="";
 }
-function reviewingRace(){
-  return training?.ref.includes("/can/")&&!training.done&&training.reviewIndex===training.index;
+function reviewingTraining(){
+  return training&&!training.done&&["can","belt"].includes(training.ref.split("/")[1])&&training.reviewIndex===training.index;
 }
 function trainingCorrection(q,value){
   value??="";
   const correct=trainingCorrect(q,value);
   const answer=typeof q.answer==="number"?displayNumber(q.answer):q.answer;
-  return `<div class="race-correction ${correct?"bravo":"reprendre"}" id="race-correction" role="status" tabindex="-1">
+  return `<div class="training-correction ${correct?"bravo":"reprendre"}" id="training-correction" role="status" tabindex="-1">
     <p><strong>Correction · ${correct?"Bravo !":value?"À revoir":"Question passée"}</strong></p>
-    ${value&&!correct?`<p>Ta réponse : <b>${clean(value)}</b></p>`:""}
-    <p>Réponse attendue : <b>${clean(answer)}</b></p>
-    <p>${clean(trainingExplanation(q))}</p></div>`;
+    ${value&&!correct?`<p>Ta réponse : <b>${mathText(value)}</b></p>`:""}
+    <p>Réponse attendue : <b>${mathText(answer)}</b></p>
+    <p>${mathText(trainingExplanation(q))}</p></div>`;
 }
 function restoreTraining(ref){
   const candidate=[...activities.values()].filter(activity=>activity.id.startsWith("training/"+ref+"/"))
@@ -590,7 +592,7 @@ async function finishTraining(){
 }
 function trainingClock() {
   const node=document.querySelector("#training-clock");
-  if(!training?.deadline||training.done||reviewingRace()||!node) return;
+  if(!training?.deadline||training.done||reviewingTraining()||!node) return;
   const seconds=Math.max(0,Math.ceil((training.deadline-Date.now())/1000));
   node.textContent=`${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,"0")}`;
   if(seconds===0) void finishTraining();
@@ -607,7 +609,7 @@ function trainingPage(type,id) {
   if(training?.ref!==ref&&renderTrainingIntro!==ref) training=restoreTraining(ref);
   const head=`<a class="text-link" href="#/defis">← Les entraînements</a><p class="eyebrow">✦ &nbsp; ${selectedGrade}</p><h1>${title}</h1>`;
   if(training?.ref!==ref){
-    return head+`<section class="paper"><p>${isRace?"30 questions à faire de tête, avec ou sans chrono. La correction s’affiche après chaque réponse.":isBelt?"12 questions réparties entre les six compétences de la ceinture.":"6 questions pour retravailler l’automatisme."}${isRace?"":" Le corrigé apparaît à la fin."}</p>
+    return head+`<section class="paper"><p>${isRace?"30 questions à faire de tête, avec ou sans chrono.":isBelt?"12 questions réparties entre les six compétences de la ceinture.":"6 questions pour retravailler l’automatisme."}${isRace||isBelt?" La correction s’affiche après chaque réponse.":" Le corrigé apparaît à la fin."}</p>
       <div class="pills"><button class="primary" data-training-start="libre">Commencer sans chrono ↗</button>
       ${isRace?'<button class="quiet" data-training-start="chrono">Lancer le chrono de 9 min ↗</button>':""}</div>
       ${race?`<p class="footnote">Série originale inspirée des sujets de la Course aux nombres. <a class="text-link" href="${officialCANArchives}" target="_blank" rel="noopener">Retrouver les sujets dans les annales officielles ↗</a></p>`:""}</section>`;
@@ -620,21 +622,21 @@ function trainingPage(type,id) {
       <div class="quiz-review">${training.questions.map((q,i)=>{
         const value=training.answers[i]??"", ok=trainingCorrect(q,value);
         return `<details><summary>${i+1}. ${clean(q.skill)} · ${ok?"Réussie":value?"À revoir":"Non répondue"}</summary>
-          <p>${clean(q.prompt)}</p>${trainingVisual(q.figure,isRace?trainingSolution(q):null)}${comparisonContext(q)}<p><strong>Ta réponse.</strong> ${clean(value||"—")} · <strong>Réponse attendue.</strong> ${typeof q.answer==="number"?displayNumber(q.answer):clean(q.answer)}</p>
-          <p>${clean(isRace?trainingExplanation(q):q.explain)}</p></details>`;
+          <p>${mathText(q.prompt)}</p>${trainingVisual(q.figure,trainingSolution(q))}${comparisonContext(q)}<p><strong>Ta réponse.</strong> ${mathText(value||"—")} · <strong>Réponse attendue.</strong> ${typeof q.answer==="number"?displayNumber(q.answer):mathText(q.answer)}</p>
+          <p>${mathText(trainingExplanation(q))}</p></details>`;
       }).join("")}</div></section>`;
   }
   const q=training.questions[training.index], saved=training.answers[training.index]??"";
-  const reviewing=reviewingRace();
+  const reviewing=reviewingTraining();
   const clock=training.deadline?(reviewing?' · Chrono en pause':' · <output id="training-clock" aria-label="Temps restant"></output>'):"";
   return head+`<section class="paper"><p class="eyebrow">QUESTION ${training.index+1} / ${training.questions.length}${clock}</p>
-    <h2 id="training-question" tabindex="-1">${clean(q.prompt)}</h2>${trainingVisual(q.figure,reviewing?trainingSolution(q):null)}
+    <h2 id="training-question" tabindex="-1">${mathText(q.prompt)}</h2>${trainingVisual(q.figure,reviewing?trainingSolution(q):null)}
     ${reviewing?`${comparisonContext(q)}${trainingCorrection(q,saved)}
-      <button class="primary" data-race-next>${training.index+1===training.questions.length?"Voir le bilan":"Suivant"} ↗</button>`:
+      <button class="primary" data-training-next ${busy||activityPending?"disabled":""}>${training.index+1===training.questions.length?"Voir le bilan":"Question suivante"} ↗</button>`:
       `<form id="training-answer" class="answer">${q.compare?comparisonFields("answer",q.compare,saved,true):q.options
         ?touchChoices("answer",q.options.map(option=>[option,option]),{value:saved,immediate:true})
         :touchNumber("answer",{value:saved,open:true})}
-      <button class="${q.options?"quiet":"primary"}">${q.options?(saved?"Valider":"Passer"):isRace?"Valider":training.index+1===training.questions.length?"Voir le bilan":"Question suivante"} ↗</button></form>
+      <button class="${q.options?"quiet":"primary"}" ${busy||activityPending?"disabled":""}>${q.options?(saved?"Valider":"Passer"):isRace||isBelt?"Valider":training.index+1===training.questions.length?"Voir le bilan":"Question suivante"} ↗</button></form>
       <div class="pills">${training.index?'<button class="quiet" data-training-back>Question précédente</button>':""}
       ${isRace&&!training.index&&!training.deadline?'<button class="quiet" data-race-chrono>Repartir avec le chrono de 9 min</button>':""}
       <button class="quiet" data-training-finish>Terminer la série</button></div>`}</section>`;
@@ -672,7 +674,7 @@ function weeklyPage(){
     ${[featured,...weeklyProblems.keys()].filter((i,p,list)=>list.indexOf(i)===p).map(i=>{
       const {title,problems}=weeklyProblems[i];
       return `<details><summary>${clean(title)}${i===featured?" · révision suggérée":""}</summary>
-      ${problems.map(({prompt,solution,method,bars},j)=>`<article class="weekly-problem"><h3>Problème ${j+1}</h3><p>${clean(prompt)}</p>
+      ${problems.map(({prompt,solution,method,bars},j)=>`<article class="weekly-problem"><h3>Problème ${j+1}</h3><p>${mathText(prompt)}</p>
       <details><summary>Voir un indice et le schéma</summary><p>${clean(method)}</p>
         <figure class="bar-figure"><figcaption>Barre entière · ${clean(bars.total)}</figcaption>
         <div class="problem-bars">${bars.segments.map(({label,weight},k)=>`<span style="flex:${Number(weight)} 1 0" class="${bars.group&&k<bars.group.count?"grouped":""}">${clean(label)}</span>`).join("")}</div>
@@ -854,9 +856,9 @@ function lessonView(key) {
   const concept=concepts[key];
   if(concept?.worked){
     const [prompt,answer]=concept.worked(concept.initial);
-    return `<article class="paper"><h2>Exemple à résoudre</h2><p>${clean(prompt)}</p>
+    return `<article class="paper"><h2>Exemple à résoudre</h2><p>${mathText(prompt)}</p>
       <details><summary>Vérifier ma réponse</summary><p>${displayNumber(answer)}</p></details>
-      <details><summary>Rappel et méthode</summary><p>${clean(concept.summary)}</p></details>
+      <details><summary>Rappel et méthode</summary><p>${mathText(concept.summary)}</p></details>
       <div class="pills"><button class="quiet" data-action="finish-lesson" ${busy?"disabled":""}>${active.done?"✓ Fiche terminée":"Marquer la fiche comme lue"}</button>
       <a class="primary" href="#/atelier/${key}/quiz">M’entraîner ↗</a></div></article>`;
   }
@@ -901,7 +903,7 @@ function model(key) {
     document.querySelector("#a-out").textContent=n;
     if(concept.worked){
       const [prompt,answer]=concept.worked(n);
-      document.querySelector("#model").innerHTML=`<div class="live-example"><p><strong>Exemple avec ton réglage.</strong> ${clean(prompt)}</p>
+      document.querySelector("#model").innerHTML=`<div class="live-example"><p><strong>Exemple avec ton réglage.</strong> ${mathText(prompt)}</p>
         <p><strong>Réponse.</strong> ${displayNumber(answer)}</p></div>`;
       document.querySelector("#formula").textContent="";
       return;
@@ -1022,21 +1024,21 @@ function quizVisual(q) {
 function correctionBlock(q,answer) {
   const [tone,title,detail]=correctionTone(q,answer);
   return `<section class="correction ${tone}" role="status"><h2>${title}</h2>
-    <p><strong>Ta réponse.</strong> ${clean(responseLabel(q,answer.value))}</p>
+    <p><strong>Ta réponse.</strong> ${mathText(responseLabel(q,answer.value))}</p>
     ${detail?`<p>${clean(detail)}</p>`:""}
-    <p><strong>La méthode.</strong> ${clean(answer.explain||q.explain)}</p></section>`;
+    <p><strong>La méthode.</strong> ${mathText(answer.explain||q.explain)}</p></section>`;
 }
 function quizView(key) {
   const series=questions(key,active.seed,active.level,active.quizVersion);
   if(feedback) return `<article class="paper"><p class="eyebrow">QUESTION ${active.step} / 5 · CORRECTION</p>
-    <p>${clean(series[active.step-1].prompt)}</p>${comparisonContext(series[active.step-1])}${quizVisual(series[active.step-1])}
+    <p>${mathText(series[active.step-1].prompt)}</p>${comparisonContext(series[active.step-1])}${quizVisual(series[active.step-1])}
     ${correctionBlock(series[active.step-1],active.answers.at(-1))}
     <button class="primary" data-action="continue-quiz">${active.done?"Voir mon bilan":"Question suivante"} →</button></article>`;
   const levelButtons=`<div class="pills">${levels.map((l,i)=>`<button data-level="${i}" aria-pressed="${active.level===i}" ${active.answers.length||busy?"disabled":""}>${l}</button>`).join("")}</div>`;
   if(active.done){
     const score=active.answers.filter(a=>a.correct).length;
     const review=active.answers.map((answer,i)=>`<details><summary>Question ${i+1} · ${answer.correct?"Réussie":"À revoir"}</summary>
-      <p>${clean(series[i].prompt)}</p>${comparisonContext(series[i])}${correctionBlock(series[i],answer)}</details>`).join("");
+      <p>${mathText(series[i].prompt)}</p>${comparisonContext(series[i])}${correctionBlock(series[i],answer)}</details>`).join("");
     return `<article class="paper result"><p class="eyebrow">✦ &nbsp; BILAN DU QUIZ</p><h2>${score}/5 réponses justes</h2><p>${active.answers.filter(a=>a.correct&&!a.help).length} réussies en autonomie · ${evidence[key]?.perfect?.length||0}/2 séries parfaites pour maîtriser la notion.</p>
       <div class="quiz-review">${review}</div>
       <button class="primary" data-action="restart">Nouvelle série ↗</button><a class="text-link next-link" href="#/atelier/${key}/lecon">Revoir la leçon →</a><a class="text-link next-link" href="#/atelier/${key}/jeu">Passer au jeu →</a></article>`;
@@ -1044,11 +1046,11 @@ function quizView(key) {
   const q=series[active.step];
   return `<article class="paper"><p class="eyebrow">QUESTION ${active.step+1} / 5</p>
     <div class="segments" aria-label="Question ${active.step+1} sur 5">${Array.from({length:5},(_,i)=>`<span class="${i<=active.step?"filled":""}"></span>`).join("")}</div>
-    ${levelButtons}<h2>${clean(q.prompt)}</h2>${quizVisual(q)}<form id="answer" class="answer">${answerFields(q)}
+    ${levelButtons}<h2>${mathText(q.prompt)}</h2>${quizVisual(q)}<form id="answer" class="answer">${answerFields(q)}
     <p data-answer-error role="alert"></p>${q.kind==="choice"?"":`<button class="primary" ${busy?"disabled":""}>Vérifier ↗</button>`}</form>
     <button class="quiet" data-action="help" aria-controls="quiz-help" aria-expanded="${help||active.level===0}">Indice et rappel de cours</button>
-    <div id="quiz-help" class="hint" ${help||active.level===0?"":"hidden"}><p><strong>Indice.</strong> ${clean(q.hint||lessons[key].help)}</p>
-      <p><strong>À retenir.</strong> ${clean(explorations[key]?.recap||lessons[key].summary)}</p></div>
+    <div id="quiz-help" class="hint" ${help||active.level===0?"":"hidden"}><p><strong>Indice.</strong> ${mathText(q.hint||lessons[key].help)}</p>
+      <p><strong>À retenir.</strong> ${mathText(explorations[key]?.recap||lessons[key].summary)}</p></div>
     </article>`;
 }
 function gameView(key) {
@@ -1068,7 +1070,7 @@ function gameView(key) {
     const target=concept.targets[active.step], expected=displayNumber(concept.model(target));
     return `<article class="paper"><p class="eyebrow">DÉFI ${active.step+1} / 3</p><h2>${clean(concept.mission)}</h2>
       <p>Trouve une valeur de départ qui donne <b>${expected} ${clean(concept.label)}</b>.</p>
-      <details><summary>Voir un exemple de méthode</summary><p>${clean(concept.summary)}</p><p>${clean(concept.equation(concept.initial))}</p></details>
+      <details><summary>Voir un exemple de méthode</summary><p>${mathText(concept.summary)}</p><p>${mathText(concept.equation(concept.initial))}</p></details>
       <form class="answer" id="concept-answer">${touchNumber("setting",{label:concept.control,min:concept.min,max:concept.max,open:true,required:true,fraction:false})}
       <button class="primary" ${busy?"disabled":""}>Valider ↗</button></form>
       ${feedback?`<p class="hint" role="status">${clean(feedback)}</p>`:""}</article>`;
@@ -1257,22 +1259,26 @@ root.addEventListener("submit",async e=>{
     return;
   }
   if(e.target.id==="training-answer"&&training&&!training.done){
-    if(busy||activityPending||reviewingRace()) return;
+    if(busy||activityPending||reviewingTraining()) return;
     const remaining=training.deadline?training.deadline-Date.now():null;
     if(remaining!==null&&remaining<=0) return finishTraining();
     training.answers[training.index]=String(values.answer??"").trim();
-    if(training.ref.includes("/can/")){
+    if(["can","belt"].includes(training.ref.split("/")[1])){
       training.reviewIndex=training.index;
       training.reviewTime=remaining;
     }else if(training.index+1===training.questions.length) training.done=true;
     else training.index++;
-    await saveTraining();render();
-    const correction=document.querySelector("#race-correction");
+    const saving=saveTraining();
+    render();
+    const correction=document.querySelector("#training-correction");
     if(correction){
       correction.focus({preventScroll:true});
       document.querySelector("#training-question")?.scrollIntoView({block:"start"});
     }
     else document.querySelector("#training-answer button")?.focus({preventScroll:true});
+    await saving;
+    render();
+    document.querySelector("#training-correction")?.focus({preventScroll:true});
     return;
   }
   if(busy||pending) return;
@@ -1407,8 +1413,8 @@ root.addEventListener("click",async e=>{
     else{renderTrainingIntro=training.ref;training=null;}
     render();return;
   }
-  if("raceNext" in d){
-    if(busy||activityPending||!reviewingRace()) return;
+  if("trainingNext" in d){
+    if(busy||activityPending||!reviewingTraining()) return;
     if(training.deadline&&Number.isFinite(training.reviewTime)) training.deadline=Date.now()+training.reviewTime;
     training.reviewIndex=null;training.reviewTime=null;
     if(training.index+1===training.questions.length) training.done=true;
@@ -1417,7 +1423,7 @@ root.addEventListener("click",async e=>{
     document.querySelector("#training-question")?.focus();
     return;
   }
-  if(("trainingBack" in d || "trainingFinish" in d)&&training&&!training.done&&!reviewingRace()){
+  if(("trainingBack" in d || "trainingFinish" in d)&&training&&!training.done&&!reviewingTraining()){
     if(busy||activityPending) return;
     if(training.deadline&&Date.now()>=training.deadline) return finishTraining();
     if("trainingFinish" in d) return finishTraining();
