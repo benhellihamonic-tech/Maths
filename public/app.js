@@ -529,7 +529,8 @@ function recentCourse(){
   }
   const [,grade,id,mode,form]=recent.id.split("/");
   const chapter=findChapter(grade,id);
-  return chapter?{title:chapter.title,href:courseHref(chapter,mode,grade)+(form==="2"?"/2":""),done:recent.state.done}:null;
+  const formSuffix=form==="2"?"/2":grade==="6e"&&id==="decimaux"&&mode==="evaluation"?"/1":"";
+  return chapter?{title:chapter.title,href:courseHref(chapter,mode,grade)+formSuffix,done:recent.state.done}:null;
 }
 
 function chapitres() {
