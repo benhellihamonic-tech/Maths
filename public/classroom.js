@@ -1,3 +1,4 @@
+import {decimalTrainingSet} from "./decimal-sheets.js";
 // Progressions de classe. Chaque groupe relie la séquence enseignée aux ateliers disponibles.
 export const classPlans = {
   "6e":[
@@ -456,6 +457,10 @@ function fractionParts(text){
 export function trainingCorrect(question,value){
  const raw=unitless(value), expected=question.answer;
  if(!raw) return false;
+ if(question.between){
+  const number=Number(raw);
+  return /^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/.test(raw)&&number>question.between[0]&&number<question.between[1];
+ }
  if(question.options) return String(value)===String(expected);
  const fraction=fractionParts(unitless(expected));
  if(fraction){
@@ -529,6 +534,7 @@ function trainingFigure(key,n,m,i){
 }
 
 export function trainingSet(type,grade,id,seed,version=0){
+ if(type==="sheet") return grade==="6e"?decimalTrainingSet(id,seed):[];
  const skills=type==="can"&&classRaces(grade).some(race=>race.level===id)?races[id]:
   type==="belt"?classBelts[grade]?.[Number(id)]:
   type==="auto"?classAutomatisms[grade]?.[Number(id)]?.[2]:undefined;

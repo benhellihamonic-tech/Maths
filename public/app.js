@@ -1,4 +1,5 @@
 import {trainingVisual} from "./training-figures.js";
+import {decimalSheets,decimalSheetRecall} from "./decimal-sheets.js";
 import {chapters} from "./chapters.js";
 import {beltColors,classBelts,classAutomatisms,weeklyAutomatisms,weeklyProblems,classRaces,officialCAN,officialCANArchives,trainingSet,trainingCorrect,chapterAnswerCorrect} from "./classroom.js";
 import {explorations, correctionTone} from "./pedagogie.js";
@@ -475,6 +476,10 @@ function courseView(grade,id,mode,formPart){
     <h1>${clean(chapter.title)}</h1>
     <nav class="pills course-tabs" aria-label="Étapes du chapitre">${Object.entries(courseSections).map(([key,label])=>
       `<a class="${mode===key?"primary":"quiet"}" href="${courseHref(chapter,key,grade)}" ${mode===key?'aria-current="page"':""}>${label}</a>`).join("")}</nav>`;
+  if(grade==="6e"&&id==="decimaux"&&mode==="evaluation"){
+    if(Object.hasOwn(decimalSheets,formPart)) return trainingPage("sheet",formPart,grade);
+    if(!formPart) return title+decimalPreparation();
+  }
   const skills=`<ul>${chapter.skills.map(skill=>`<li>${clean(skill)}</li>`).join("")}</ul>`;
   if(mode==="fiche"){
     const connected=chapter.links.filter(key=>Object.hasOwn(lessons,key));
@@ -501,11 +506,27 @@ function courseView(grade,id,mode,formPart){
         <button class="quiet" name="submitMode" value="draft">Enregistrer mon brouillon</button></div></form>`}</section>`;
   return title+body+(saved?.done?chapterBilan(chapter,items,saved.answers,grade):"");
 }
+function decimalPreparation(){
+  return `<section class="paper decimal-preparation"><p class="eyebrow">PRÉPARER LE CHAPITRE 6</p><h2>Quelle fiche veux-tu réviser ?</h2>
+    <p>Un rappel visuel, puis 8 questions avec une correction après chaque réponse.</p>
+    <div class="decimal-sheet-grid">${Object.entries(decimalSheets).map(([id,sheet])=>{
+      const saved=restoreTraining("6e/sheet/"+id);
+      const score=saved?.done?saved.questions.filter((q,i)=>trainingCorrect(q,saved.answers[i]??"")).length:null;
+      return `<a class="decimal-sheet-card" href="#/cours/6e/decimaux/evaluation/${id}"><span class="decimal-sheet-icon" aria-hidden="true">${sheet.icon}</span>
+        <div><small>${id}</small><h3>${sheet.short}</h3><p>${saved?.done?`✓ Série terminée · ${score}/8`:saved?"Reprendre mon entraînement":"Rappel + entraînement"}</p></div><span aria-hidden="true">↗</span></a>`;
+    }).join("")}</div>
+    <details><summary>Faire un bilan du chapitre</summary><div class="pills">
+      <a class="quiet" href="#/cours/6e/decimaux/evaluation/1">Sujet A ↗</a><a class="quiet" href="#/cours/6e/decimaux/evaluation/2">Sujet B ↗</a></div></details></section>`;
+}
 function recentCourse(){
   const prefix=`chapter/${selectedGrade}/`;
-  const recent=[...activities.values()].filter(activity=>activity.id.startsWith(prefix))
+  const recent=[...activities.values()].filter(activity=>activity.id.startsWith(prefix)||activity.id.startsWith(`training/${selectedGrade}/sheet/`))
     .sort((a,b)=>Number(a.state.done)-Number(b.state.done)||(b.state.updated??0)-(a.state.updated??0))[0];
   if(!recent) return null;
+  if(recent.id.startsWith("training/")){
+    const [,,,id]=recent.id.split("/");
+    return decimalSheets[id]?{title:id+" · "+decimalSheets[id].short,href:"#/cours/6e/decimaux/evaluation/"+id,done:recent.state.done}:null;
+  }
   const [,grade,id,mode,form]=recent.id.split("/");
   const chapter=findChapter(grade,id);
   return chapter?{title:chapter.title,href:courseHref(chapter,mode,grade)+(form==="2"?"/2":""),done:recent.state.done}:null;
@@ -523,11 +544,11 @@ let training=null, trainingTimer=null, renderTrainingIntro=null;
 function raceQuickButton(race){
   return race?`<button type="button" class="primary" data-race-level="${race.level}">Course aux nombres · ${race.name} ↗</button>`:"";
 }
-async function startTraining(type,id,mode){
+async function startTraining(type,id,mode,grade=selectedGrade){
   const seed=Math.floor(Math.random()*0x7fffffff);
-  const ref=[selectedGrade,type,id].join("/");
+  const ref=[grade,type,id].join("/");
   const version=type==="can"?2:1;
-  const questions=trainingSet(type,selectedGrade,id,seed,version);
+  const questions=trainingSet(type,grade,id,seed,version);
   if(!questions.length) return;
   renderTrainingIntro=null;
   training={ref,seed,version,activityId:"training/"+ref+"/"+activityEvent(),questions,answers:[],index:0,done:false,
@@ -551,7 +572,7 @@ function enterFree(grade=""){
   training=null;renderTrainingIntro=null;error="";notice="";
 }
 function reviewingTraining(){
-  return training&&!training.done&&["can","belt"].includes(training.ref.split("/")[1])&&training.reviewIndex===training.index;
+  return training&&!training.done&&["can","belt","sheet"].includes(training.ref.split("/")[1])&&training.reviewIndex===training.index;
 }
 function trainingCorrection(q,value){
   value??="";
@@ -560,7 +581,7 @@ function trainingCorrection(q,value){
   return `<div class="training-correction ${correct?"bravo":"reprendre"}" id="training-correction" role="status" tabindex="-1">
     <p><strong>Correction · ${correct?"Bravo !":value?"À revoir":"Question passée"}</strong></p>
     ${value&&!correct?`<p>Ta réponse : <b>${mathText(value)}</b></p>`:""}
-    <p>Réponse attendue : <b>${mathText(answer)}</b></p>
+    <p>${q.between?"Une réponse possible":"Réponse attendue"} : <b>${mathText(answer)}</b></p>
     <p>${mathText(trainingExplanation(q))}</p></div>`;
 }
 function restoreTraining(ref){
@@ -597,20 +618,21 @@ function trainingClock() {
   node.textContent=`${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,"0")}`;
   if(seconds===0) void finishTraining();
 }
-function trainingPage(type,id) {
-  const isRace=type==="can", isBelt=type==="belt", isAuto=type==="auto";
-  const race=classRaces(selectedGrade).find(item=>item.level===id);
-  const valid=isRace?Boolean(race):isBelt?/^([0-6])$/.test(id)&&Boolean(classBelts[selectedGrade]):
-    isAuto&&/^(0|[1-9]\d*)$/.test(id)&&Boolean(classAutomatisms[selectedGrade]?.[Number(id)]);
+function trainingPage(type,id,grade=selectedGrade) {
+  const isRace=type==="can", isBelt=type==="belt", isAuto=type==="auto", isSheet=type==="sheet";
+  const race=classRaces(grade).find(item=>item.level===id);
+  const valid=isSheet?grade==="6e"&&Object.hasOwn(decimalSheets,id):isRace?Boolean(race):isBelt?/^([0-6])$/.test(id)&&Boolean(classBelts[grade]):
+    isAuto&&/^(0|[1-9]\d*)$/.test(id)&&Boolean(classAutomatisms[grade]?.[Number(id)]);
   if(!valid) return "";
-  const title=isRace?`Course aux nombres · ${race.name}`:isBelt?`Ceinture ${beltColors[Number(id)].toLowerCase()} · ${selectedGrade}`:
-    classAutomatisms[selectedGrade][Number(id)].slice(0,2).join(" · ");
-  const ref=[selectedGrade,type,id].join("/");
+  const title=isSheet?decimalSheets[id].title:isRace?`Course aux nombres · ${race.name}`:isBelt?`Ceinture ${beltColors[Number(id)].toLowerCase()} · ${grade}`:
+    classAutomatisms[grade][Number(id)].slice(0,2).join(" · ");
+  const ref=[grade,type,id].join("/");
   if(training?.ref!==ref&&renderTrainingIntro!==ref) training=restoreTraining(ref);
-  const head=`<a class="text-link" href="#/defis">← Les entraînements</a><p class="eyebrow">✦ &nbsp; ${selectedGrade}</p><h1>${title}</h1>`;
+  const head=`<a class="text-link" href="${isSheet?"#/cours/6e/decimaux/evaluation":"#/defis"}">← ${isSheet?"Les fiches N22 à N27":"Les entraînements"}</a><p class="eyebrow">✦ &nbsp; ${grade}${isSheet?" · "+id:""}</p><h1>${title}</h1>
+    ${isSheet?`<nav class="pills decimal-sheet-nav" aria-label="Fiches du chapitre">${Object.keys(decimalSheets).map(code=>`<a class="${code===id?"primary":"quiet"}" href="#/cours/6e/decimaux/evaluation/${code}" ${code===id?'aria-current="page"':""}>${code}</a>`).join("")}</nav>`:""}`;
   if(training?.ref!==ref){
-    return head+`<section class="paper"><p>${isRace?"30 questions à faire de tête, avec ou sans chrono.":isBelt?"12 questions réparties entre les six compétences de la ceinture.":"6 questions pour retravailler l’automatisme."}${isRace||isBelt?" La correction s’affiche après chaque réponse.":" Le corrigé apparaît à la fin."}</p>
-      <div class="pills"><button class="primary" data-training-start="libre">Commencer sans chrono ↗</button>
+    return head+(isSheet?decimalSheetRecall(id):"")+`<section class="paper"><p>${isSheet?"8 questions pour réviser cette fiche.":isRace?"30 questions à faire de tête, avec ou sans chrono.":isBelt?"12 questions réparties entre les six compétences de la ceinture.":"6 questions pour retravailler l’automatisme."}${isRace||isBelt||isSheet?" La correction s’affiche après chaque réponse.":" Le corrigé apparaît à la fin."}</p>
+      <div class="pills"><button class="primary" data-training-start="libre">${isSheet?"Commencer les exercices":"Commencer sans chrono"} ↗</button>
       ${isRace?'<button class="quiet" data-training-start="chrono">Lancer le chrono de 9 min ↗</button>':""}</div>
       ${race?`<p class="footnote">Série originale inspirée des sujets de la Course aux nombres. <a class="text-link" href="${officialCANArchives}" target="_blank" rel="noopener">Retrouver les sujets dans les annales officielles ↗</a></p>`:""}</section>`;
   }
@@ -622,24 +644,34 @@ function trainingPage(type,id) {
       <div class="quiz-review">${training.questions.map((q,i)=>{
         const value=training.answers[i]??"", ok=trainingCorrect(q,value);
         return `<details><summary>${i+1}. ${clean(q.skill)} · ${ok?"Réussie":value?"À revoir":"Non répondue"}</summary>
-          <p>${mathText(q.prompt)}</p>${trainingVisual(q.figure,trainingSolution(q))}${comparisonContext(q)}<p><strong>Ta réponse.</strong> ${mathText(value||"—")} · <strong>Réponse attendue.</strong> ${typeof q.answer==="number"?displayNumber(q.answer):mathText(q.answer)}</p>
+          <p>${mathText(q.prompt)}</p>${q.display?`<p class="decimal-question-value">${mathText(q.display)}</p>`:""}${trainingVisual(q.figure,trainingSolution(q))}${comparisonContext(q)}<p><strong>Ta réponse.</strong> ${mathText(value||"—")} · <strong>${q.between?"Une réponse possible.":"Réponse attendue."}</strong> ${typeof q.answer==="number"?displayNumber(q.answer):mathText(q.answer)}</p>
           <p>${mathText(trainingExplanation(q))}</p></details>`;
-      }).join("")}</div></section>`;
+      }).join("")}</div></section>${isSheet?decimalSheetRecall(id):""}`;
   }
   const q=training.questions[training.index], saved=training.answers[training.index]??"";
   const reviewing=reviewingTraining();
   const clock=training.deadline?(reviewing?' · Chrono en pause':' · <output id="training-clock" aria-label="Temps restant"></output>'):"";
   return head+`<section class="paper"><p class="eyebrow">QUESTION ${training.index+1} / ${training.questions.length}${clock}</p>
-    <h2 id="training-question" tabindex="-1">${mathText(q.prompt)}</h2>${trainingVisual(q.figure,reviewing?trainingSolution(q):null)}
+    <h2 id="training-question" tabindex="-1">${mathText(q.prompt)}</h2>${q.display?`<p class="decimal-question-value">${mathText(q.display)}</p>`:""}${q.place&&!reviewing?"":trainingVisual(q.figure,reviewing?trainingSolution(q):null)}
     ${reviewing?`${comparisonContext(q)}${trainingCorrection(q,saved)}
       <button class="primary" data-training-next ${busy||activityPending?"disabled":""}>${training.index+1===training.questions.length?"Voir le bilan":"Question suivante"} ↗</button>`:
-      `<form id="training-answer" class="answer">${q.compare?comparisonFields("answer",q.compare,saved,true):q.options
+      `<form id="training-answer" class="answer">${q.place?decimalPlacementFields(q,saved):q.compare?comparisonFields("answer",q.compare,saved,true):q.options
         ?touchChoices("answer",q.options.map(option=>[option,option]),{value:saved,immediate:true})
         :touchNumber("answer",{value:saved,open:true})}
-      <button class="${q.options?"quiet":"primary"}" ${busy||activityPending?"disabled":""}>${q.options?(saved?"Valider":"Passer"):isRace||isBelt?"Valider":training.index+1===training.questions.length?"Voir le bilan":"Question suivante"} ↗</button></form>
+      <button class="${q.options||q.place?"quiet":"primary"}" ${busy||activityPending?"disabled":""}>${q.options||q.place?(saved?"Valider":"Passer"):isRace||isBelt||isSheet?"Valider":training.index+1===training.questions.length?"Voir le bilan":"Question suivante"} ↗</button></form>
       <div class="pills">${training.index?'<button class="quiet" data-training-back>Question précédente</button>':""}
       ${isRace&&!training.index&&!training.deadline?'<button class="quiet" data-race-chrono>Repartir avec le chrono de 9 min</button>':""}
-      <button class="quiet" data-training-finish>Terminer la série</button></div>`}</section>`;
+      <button class="quiet" data-training-finish>Terminer la série</button></div>`}</section>
+      ${isSheet?`<details class="paper"><summary>Revoir le rappel de ${id}</summary>${decimalSheetRecall(id)}</details>`:""}`;
+}
+function decimalPlacementFields(q,value){
+  const {start,step,count=10}=q.figure;
+  return `<div class="touch-select decimal-placement" data-touch-select data-immediate>
+    <input type="hidden" name="answer" value="${clean(value)}">${trainingVisual(q.figure)}
+    <div class="decimal-line-targets" role="group" aria-label="Choisis la graduation où placer A">${Array.from({length:count+1},(_,i)=>{
+      const number=(start+step*i)/1000;
+      return `<button type="button" class="touch-option" data-touch-value="${number}" aria-label="Placer A sur la graduation ${i+1} à partir de la gauche" aria-pressed="${String(number)===String(value)}" style="--position:${(30+60*i)/660*100}%">●</button>`;
+    }).join("")}</div></div>`;
 }
 function trainingExplanation(q){
   const f=q.figure;
@@ -716,7 +748,7 @@ function activityJournal(){
       const chapter=findChapter(grade,id);
       return chapter?`<li>${clean(chapter.title)} · ${mode==="evaluation"?"Sujet blanc "+(form==="2"?"B":"A"):"Entraînement"}</li>`:"";
     }
-    const title=id==="belt"?`Ceinture ${beltColors[Number(mode)]}`:id==="can"?`Course aux nombres · fin de ${mode==="cm2"?"CM2":mode}`:classAutomatisms[grade]?.[Number(mode)]?.[1];
+    const title=id==="sheet"&&decimalSheets[mode]?`${mode} · ${decimalSheets[mode].short}`:id==="belt"?`Ceinture ${beltColors[Number(mode)]}`:id==="can"?`Course aux nombres · fin de ${mode==="cm2"?"CM2":mode}`:classAutomatisms[grade]?.[Number(mode)]?.[1];
     const items=trainingSet(id,grade,mode,row.state.seed,row.state.version);
     const score=items.filter((item,i)=>trainingCorrect(item,row.state.answers?.[i]??"")).length;
     return title&&items.length?`<li>${clean(title)} · ${score}/${items.length}</li>`:"";
@@ -1263,7 +1295,7 @@ root.addEventListener("submit",async e=>{
     const remaining=training.deadline?training.deadline-Date.now():null;
     if(remaining!==null&&remaining<=0) return finishTraining();
     training.answers[training.index]=String(values.answer??"").trim();
-    if(["can","belt"].includes(training.ref.split("/")[1])){
+    if(["can","belt","sheet"].includes(training.ref.split("/")[1])){
       training.reviewIndex=training.index;
       training.reviewTime=remaining;
     }else if(training.index+1===training.questions.length) training.done=true;
@@ -1402,9 +1434,11 @@ root.addEventListener("click",async e=>{
     await openRace(d.raceLevel);return;
   }
   if(d.trainingStart||"raceChrono" in d){
-    const [tab,type,id]=route();
-    if(tab!=="defis"||busy||activityPending) return;
-    await startTraining(type,id,d.trainingStart||"chrono");render();return;
+    let [tab,type,id]=route();
+    const sheet=tab==="cours"&&type==="6e"&&id==="decimaux"&&route()[3]==="evaluation"&&Object.hasOwn(decimalSheets,route()[4]);
+    if((tab!=="defis"&&!sheet)||busy||activityPending) return;
+    if(sheet){type="sheet";id=route()[4];}
+    await startTraining(type,id,d.trainingStart||"chrono",sheet?"6e":selectedGrade);render();return;
   }
   if("trainingRestart" in d){
     if(!training||busy||activityPending) return;

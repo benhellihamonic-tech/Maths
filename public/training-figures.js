@@ -1,3 +1,4 @@
+import {decimalLine,decimalPlaceTable} from "./decimal-sheets.js";
 // Les schémas et les valeurs de la question utilisent les mêmes données.
 function figureText(x,y,value,anchor="middle",solved=false){
   return `<text x="${x}" y="${y}" text-anchor="${anchor}"${solved?' class="figure-solution-text"':""}>${value}</text>`;
@@ -10,6 +11,10 @@ function trainingSvg(label,body,viewBox="0 0 320 174"){
 export function trainingVisual(figure,solution=null){
   if(!figure) return "";
   switch(figure.kind){
+    case "decimalLine":
+      return decimalLine(figure,solution);
+    case "decimalPlace":
+      return decimalPlaceTable(figure.value);
     case "rectangle": {
       const {length,width}=figure;
       const scale=Math.min(180/length,100/width);
